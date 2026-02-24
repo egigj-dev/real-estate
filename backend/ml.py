@@ -1,14 +1,17 @@
 """
 ML utilities: price estimation and comparable listings.
 
-Expected CSV columns used here:
-    id, price, beds, baths, sqm, furnished, neighborhood,
+Expected columns (after main.py normalisation):
+    id, price, beds, baths, sqm, furnished,
+    neighborhood_cluster, dist_to_nearest_center,
     latitude (optional), longitude (optional)
 
 Expected model:
     A sklearn-compatible regressor saved with joblib.
-    Input shape: (n, 4) → [beds, baths, sqm, furnished_numeric]
-    If your model uses more/different features adjust FEATURE_COLS below.
+    Input shape: (n, 6) →
+        [beds, baths, sqm, furnished_numeric,
+         neighborhood_cluster, dist_to_nearest_center]
+    If your model uses different features adjust FEATURE_COLS below.
 """
 
 import math
@@ -18,7 +21,10 @@ import numpy as np
 import pandas as pd
 
 # Columns fed into model.predict(). Must match what the model was trained on.
-FEATURE_COLS = ["beds", "baths", "sqm", "furnished_numeric"]
+FEATURE_COLS = [
+    "beds", "baths", "sqm", "furnished_numeric",
+    "neighborhood_cluster", "dist_to_nearest_center",
+]
 
 # Thresholds for Fair / Overpriced / Underpriced labels
 OVERPRICED_THRESHOLD = 1.10   # actual > estimated × 1.10
@@ -39,9 +45,14 @@ def _furnished_numeric(df: pd.DataFrame) -> pd.Series:
 
 
 def _build_feature_matrix(df: pd.DataFrame) -> np.ndarray:
-    """Return a (n, 4) float array for model inference / similarity."""
+    """Return a (n, len(FEATURE_COLS)) float array for model inference / similarity."""
     tmp = df.copy()
     tmp["furnished_numeric"] = _furnished_numeric(df)
+    # Fill any remaining nulls with column median so distance/predict never sees NaN
+    for col in FEATURE_COLS:
+        if col in tmp.columns:
+            tmp[col] = pd.to_numeric(tmp[col], errors="coerce")
+            tmp[col] = tmp[col].fillna(tmp[col].median())
     return tmp[FEATURE_COLS].astype(float).values
 
 
@@ -81,8 +92,11 @@ def _similarity_reason(target: pd.Series, comp: pd.Series) -> str:
     elif sqm_diff_pct < 0.20:
         parts.append("similar size")
 
-    if str(target.get("neighborhood", "")).strip().lower() == str(comp.get("neighborhood", "")).strip().lower():
-        parts.append("same neighborhood")
+    try:
+        if int(target.get("neighborhood_cluster", -1)) == int(comp.get("neighborhood_cluster", -2)):
+            parts.append("same neighborhood cluster")
+    except (TypeError, ValueError):
+        pass
 
     if not parts:
         parts.append("comparable overall features")
