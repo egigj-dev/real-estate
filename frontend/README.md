@@ -1,58 +1,54 @@
-# Tirana Listings — React + Vite + Bootstrap
-
-A property listings web app for Tirana, Albania.
+# Frontend — React + Vite
 
 ## Stack
 
-- **React 18** — UI framework
-- **Vite 5** — build tool & dev server
-- **React Bootstrap 2** — Bootstrap 5 components
-- **Bootstrap 5** — styling base
+- **React 18** — UI
+- **Vite 5** — dev server + build
+- **React Bootstrap** — components
+- **Bootstrap 5** — styling
 
-## Quick Start
+## Structure
+
+```
+frontend/src/
+├── api.js                 API calls + formatters
+├── App.jsx                Routing (listings ↔ detail)
+├── index.css              Global styles
+├── components/
+│   ├── AppNavbar.jsx
+│   ├── FeatureBadges.jsx
+│   ├── Hero.jsx
+│   ├── ListingCard.jsx
+│   └── SearchableList.jsx
+└── pages/
+    ├── ListingsPage.jsx   Browse + filter
+    └── DetailPage.jsx     Listing detail + ML estimate + comps
+```
+
+## Setup
 
 ```bash
-# 1. Install dependencies
 npm install
+```
 
-# 2. Start dev server (make sure your API is running on http://localhost:8000)
+## Run
+
+Make sure the backend is running on port 8000 first, then:
+
+```bash
 npm run dev
-
-# 3. Open http://localhost:5173
 ```
 
-## Project Structure
+Open **http://127.0.0.1:5173**
 
-```
-src/
-├── api.js                  # API helpers & formatters
-├── App.jsx                 # Root — routing between pages
-├── index.css               # Global styles & Bootstrap overrides
-├── main.jsx                # React entry point
-├── components/
-│   ├── AppNavbar.jsx       # Sticky navbar
-│   ├── FeatureBadges.jsx   # Key feature chips
-│   ├── Hero.jsx            # Hero header with stats
-│   └── ListingCard.jsx     # Individual listing card
-└── pages/
-    ├── ListingsPage.jsx    # Browse + filter listings
-    └── DetailPage.jsx      # Full listing details
+> **WSL users:** use `127.0.0.1` not `localhost` in both the browser and `src/api.js`.
+
+## Environment
+
+The API base URL is set at the top of `src/api.js`:
+
+```js
+export const API_BASE = 'http://127.0.0.1:8000'
 ```
 
-## API Endpoints Expected
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/listings?limit=20&q=...` | Paginated listing search |
-| GET | `/listings/:id` | Single listing detail |
-
-## Features
-
-- 📍 Location (Lat/Lng, formatted address)
-- 📐 Size (m², bedrooms, bathrooms, floor)
-- 🏗️ Amenities (elevator, parking, terrace)
-- 🇦🇱 Albanian descriptions
-- 🏠 Status (furnished, property type)
-- Responsive grid layout
-- Animated card entrance
-- Glassmorphism dark theme
+Change this if your backend runs on a different host or port.

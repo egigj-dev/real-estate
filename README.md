@@ -1,58 +1,34 @@
-# Tirana Listings — React + Vite + Bootstrap
+# Tirana Real Estate
 
-A property listings web app for Tirana, Albania.
+Property listings web app for Tirana, Albania. ML-powered price estimates and comparable listings.
 
-## Stack
+## Structure
 
-- **React 18** — UI framework
-- **Vite 5** — build tool & dev server
-- **React Bootstrap 2** — Bootstrap 5 components
-- **Bootstrap 5** — styling base
+```
+real-estate/
+├── backend/    FastAPI + XGBoost
+└── frontend/   React + Vite + Bootstrap
+```
 
 ## Quick Start
 
+**Terminal 1 — Backend**
 ```bash
-# 1. Install dependencies
-npm install
+cd backend
+uvicorn main:app --reload --port 8000
+```
 
-# 2. Start dev server (make sure your API is running on http://localhost:8000)
+**Terminal 2 — Frontend**
+```bash
+cd frontend
 npm run dev
-
-# 3. Open http://localhost:5173
 ```
 
-## Project Structure
-
-```
-src/
-├── api.js                  # API helpers & formatters
-├── App.jsx                 # Root — routing between pages
-├── index.css               # Global styles & Bootstrap overrides
-├── main.jsx                # React entry point
-├── components/
-│   ├── AppNavbar.jsx       # Sticky navbar
-│   ├── FeatureBadges.jsx   # Key feature chips
-│   ├── Hero.jsx            # Hero header with stats
-│   └── ListingCard.jsx     # Individual listing card
-└── pages/
-    ├── ListingsPage.jsx    # Browse + filter listings
-    └── DetailPage.jsx      # Full listing details
-```
-
-## API Endpoints Expected
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/listings?limit=20&q=...` | Paginated listing search |
-| GET | `/listings/:id` | Single listing detail |
+Open **http://127.0.0.1:5173** in your browser.
 
 ## Features
 
-- 📍 Location (Lat/Lng, formatted address)
-- 📐 Size (m², bedrooms, bathrooms, floor)
-- 🏗️ Amenities (elevator, parking, terrace)
-- 🇦🇱 Albanian descriptions
-- 🏠 Status (furnished, property type)
-- Responsive grid layout
-- Animated card entrance
-- Glassmorphism dark theme
+- Browse and filter 4 000+ Tirana property listings
+- ML price estimate with fair/overpriced/underpriced label
+- 5 comparable listings per property
+- Market insights by neighborhood
