@@ -26,6 +26,75 @@ _COL_MAP = {
 
 _FURNISHED_TRUE = {"fully_furnished", "partially_furnished"}
 
+# Tirana city centre coordinates
+_CENTRE_LAT = 41.3275
+_CENTRE_LNG = 19.8187
+
+# Zone names assigned by ranking clusters from closest → furthest from centre.
+# KMeans cluster IDs (0/1/2) are arbitrary, so we sort by mean distance.
+_ZONE_NAMES = ["Qendra & Blloku", "Komuna e Parisit", "Periferia"]
+
+
+def _assign_zone_names(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Replace 'Cluster X' labels with real Tirana zone names.
+
+    Strategy: compute each cluster's mean distance from the city centre,
+    sort ascending, then assign zone names in that order so the innermost
+    cluster always gets 'Qendra & Blloku' regardless of KMeans run order.
+    """
+    if "neighborhood_cluster" not in df.columns:
+        df["neighborhood"] = "E panjohur"
+        return df
+
+    if "distance_from_center" in df.columns:
+        mean_dist = (
+            df.groupby("neighborhood_cluster")["distance_from_center"]
+            .mean()
+            .sort_values()          # closest first
+        )
+    else:
+        # Fallback: compute haversine distance from coordinates
+        if {"latitude", "longitude"}.issubset(df.columns):
+            df["_dist_tmp"] = df.apply(
+                lambda r: _haversine(
+                    _CENTRE_LAT, _CENTRE_LNG,
+                    r["latitude"], r["longitude"]
+                ) if pd.notna(r["latitude"]) else np.nan,
+                axis=1,
+            )
+            mean_dist = (
+                df.groupby("neighborhood_cluster")["_dist_tmp"]
+                .mean()
+                .sort_values()
+            )
+            df.drop(columns=["_dist_tmp"], inplace=True)
+        else:
+            # No location data — fall back to cluster number order
+            clusters = sorted(df["neighborhood_cluster"].dropna().unique())
+            mean_dist = pd.Series(range(len(clusters)), index=clusters)
+
+    # Build mapping: cluster_id → zone name
+    zone_map = {
+        float(cluster_id): _ZONE_NAMES[i] if i < len(_ZONE_NAMES) else f"Zonë {i+1}"
+        for i, cluster_id in enumerate(mean_dist.index)
+    }
+
+    df["neighborhood"] = df["neighborhood_cluster"].apply(
+        lambda c: zone_map.get(float(c), "E panjohur") if pd.notna(c) else "E panjohur"
+    )
+    return df
+
+
+def _haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = (math.sin(dlat / 2) ** 2
+         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
+         * math.sin(dlng / 2) ** 2)
+    return R * 2 * math.asin(math.sqrt(max(0.0, min(1.0, a))))
+
 
 def _load_and_clean(path: Path) -> pd.DataFrame:
     with open(path) as f:
@@ -58,9 +127,8 @@ def _load_and_clean(path: Path) -> pd.DataFrame:
     )
     df["furnished_numeric"] = df["furnished"].astype(float)
 
-    df["neighborhood"] = df["neighborhood_cluster"].apply(
-        lambda c: f"Cluster {int(c)}" if pd.notna(c) else "Unknown"
-    )
+    # ── meaningful zone names (replaces "Cluster X") ─────────────────────
+    df = _assign_zone_names(df)
 
     # ── stable string id ────────────────────────────────────────────────────
     df["id"] = df.index.astype(str)
