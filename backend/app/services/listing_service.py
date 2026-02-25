@@ -56,23 +56,48 @@ def _row_to_dict(row: pd.Series, cols: list[str]) -> dict:
 
 def filter_listings(
     df: pd.DataFrame,
-    min_price:     Optional[float] = None,
-    max_price:     Optional[float] = None,
-    min_beds:      Optional[int]   = None,
-    max_beds:      Optional[int]   = None,
-    min_baths:     Optional[float] = None,
-    max_baths:     Optional[float] = None,
-    min_sqm:       Optional[float] = None,
-    max_sqm:       Optional[float] = None,
-    furnished:     Optional[bool]  = None,
-    neighborhood:  Optional[str]   = None,
-    property_type: Optional[str]   = None,
-    page:          int = 1,
-    per_page:      int = 20,
+    # free-text
+    q:                 Optional[str]   = None,
+    # price
+    min_price:         Optional[float] = None,
+    max_price:         Optional[float] = None,
+    # beds / baths
+    min_beds:          Optional[int]   = None,
+    max_beds:          Optional[int]   = None,
+    min_baths:         Optional[float] = None,
+    max_baths:         Optional[float] = None,
+    # size
+    min_sqm:           Optional[float] = None,
+    max_sqm:           Optional[float] = None,
+    # amenities
+    furnished:         Optional[bool]  = None,
+    has_elevator:      Optional[bool]  = None,
+    has_parking_space: Optional[bool]  = None,
+    has_garden:        Optional[bool]  = None,
+    # categorical
+    neighborhood:      Optional[str]   = None,
+    property_type:     Optional[str]   = None,
+    # sort
+    sort:              Optional[str]   = None,
+    # pagination
+    page:              int = 1,
+    per_page:          int = 20,
 ) -> PaginatedListings:
 
     mask = pd.Series(True, index=df.index)
 
+    # ── free-text search across description + property_type + city ────────────
+    if q:
+        q_lower = q.lower()
+        hay = (
+            df.get("description",    pd.Series("", index=df.index)).fillna("") + " " +
+            df.get("property_type",  pd.Series("", index=df.index)).fillna("") + " " +
+            df.get("city",           pd.Series("", index=df.index)).fillna("") + " " +
+            df.get("neighborhood",   pd.Series("", index=df.index)).fillna("")
+        ).str.lower()
+        mask &= hay.str.contains(q_lower, na=False, regex=False)
+
+    # ── numeric filters ───────────────────────────────────────────────────────
     if min_price     is not None: mask &= df["price"].astype(float) >= min_price
     if max_price     is not None: mask &= df["price"].astype(float) <= max_price
     if min_beds      is not None: mask &= df["beds"].astype(int)    >= min_beds
@@ -81,16 +106,34 @@ def filter_listings(
     if max_baths     is not None: mask &= df["baths"].astype(float) <= max_baths
     if min_sqm       is not None: mask &= df["sqm"].astype(float)   >= min_sqm
     if max_sqm       is not None: mask &= df["sqm"].astype(float)   <= max_sqm
-    if furnished     is not None: mask &= df["furnished"] == furnished
-    if neighborhood  is not None:
+
+    # ── boolean amenity filters ───────────────────────────────────────────────
+    if furnished is not None:
+        mask &= df["furnished"] == furnished
+    if has_elevator is not None and "has_elevator" in df.columns:
+        mask &= df["has_elevator"].astype(bool) == has_elevator
+    if has_parking_space is not None and "has_parking_space" in df.columns:
+        mask &= df["has_parking_space"].astype(bool) == has_parking_space
+    if has_garden is not None and "has_garden" in df.columns:
+        mask &= df["has_garden"].astype(bool) == has_garden
+
+    # ── categorical filters ───────────────────────────────────────────────────
+    if neighborhood is not None:
         mask &= df["neighborhood"].str.lower() == neighborhood.lower()
     if property_type is not None:
         mask &= df["property_type"].str.lower() == property_type.lower()
 
-    filtered = df[mask]
-    total    = len(filtered)
-    offset   = (page - 1) * per_page
-    page_df  = filtered.iloc[offset: offset + per_page]
+    filtered = df[mask].copy()
+
+    # ── sort ──────────────────────────────────────────────────────────────────
+    if sort == "price_asc":
+        filtered = filtered.sort_values("price", ascending=True)
+    elif sort == "price_desc":
+        filtered = filtered.sort_values("price", ascending=False)
+
+    total  = len(filtered)
+    offset = (page - 1) * per_page
+    page_df = filtered.iloc[offset: offset + per_page]
 
     listings = [
         ListingSummary(**_row_to_dict(row, _SUMMARY_COLS))
@@ -125,7 +168,7 @@ def get_filter_options(df: pd.DataFrame) -> FilterOptions:
         property_types=property_types,
         furnished_options=furnished_opts,
         price_range={"min": float(df["price"].min()), "max": float(df["price"].max())},
-        sqm_range={"min": float(df["sqm"].min()),   "max": float(df["sqm"].max())},
-        beds_range={"min": int(df["beds"].min()),    "max": int(df["beds"].max())},
-        baths_range={"min": float(df["baths"].min()), "max": float(df["baths"].max())},
+        sqm_range={"min": float(df["sqm"].min()),     "max": float(df["sqm"].max())},
+        beds_range={"min": int(df["beds"].min()),      "max": int(df["beds"].max())},
+        baths_range={"min": float(df["baths"].min()),  "max": float(df["baths"].max())},
     )
