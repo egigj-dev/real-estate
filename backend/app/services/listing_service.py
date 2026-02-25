@@ -87,14 +87,14 @@ def filter_listings(
 
     mask = pd.Series(True, index=df.index)
 
-    # ── free-text search across description + property_type + city ────────────
+    # ── free-text search across description + address + property_type + city ──
     if q:
         q_lower = q.lower()
         hay = (
-            df.get("description",    pd.Series("", index=df.index)).fillna("") + " " +
-            df.get("property_type",  pd.Series("", index=df.index)).fillna("") + " " +
-            df.get("city",           pd.Series("", index=df.index)).fillna("") + " " +
-            df.get("neighborhood",   pd.Series("", index=df.index)).fillna("")
+            df.get("description",   pd.Series("", index=df.index)).fillna("") + " " +
+            df.get("address",       pd.Series("", index=df.index)).fillna("") + " " +
+            df.get("property_type", pd.Series("", index=df.index)).fillna("") + " " +
+            df.get("city",          pd.Series("", index=df.index)).fillna("")
         ).str.lower()
         mask &= hay.str.contains(q_lower, na=False, regex=False)
 
@@ -120,7 +120,23 @@ def filter_listings(
 
     # ── categorical filters ───────────────────────────────────────────────────
     if neighborhood is not None:
-        mask &= df["neighborhood"].str.lower() == neighborhood.lower()
+        nb_lower = neighborhood.strip().lower()
+        if nb_lower.startswith("cluster"):
+            # Exact cluster match (e.g. "Cluster 0" from dropdown)
+            mask &= df["neighborhood"].str.lower() == nb_lower
+        else:
+            # Zone name search: check extracted address first, then description
+            addr_hit = (
+                df.get("address", pd.Series("", index=df.index))
+                .fillna("").str.lower()
+                .str.contains(nb_lower, na=False, regex=False)
+            )
+            desc_hit = (
+                df.get("description", pd.Series("", index=df.index))
+                .fillna("").str.lower()
+                .str.contains(nb_lower, na=False, regex=False)
+            )
+            mask &= addr_hit | desc_hit
     if property_type is not None:
         mask &= df["property_type"].str.lower() == property_type.lower()
 
@@ -160,7 +176,13 @@ def get_listing_detail(listing_id: str, df: pd.DataFrame) -> ListingDetail:
 
 
 def get_filter_options(df: pd.DataFrame) -> FilterOptions:
-    neighborhoods  = sorted(df["neighborhood"].dropna().unique().tolist())
+    # Return extracted zone names (non-null addresses), sorted by frequency
+    if "address" in df.columns:
+        zone_counts = df["address"].dropna().value_counts()
+        neighborhoods = zone_counts[zone_counts >= 2].index.tolist()  # at least 2 listings
+    else:
+        neighborhoods = sorted(df["neighborhood"].dropna().unique().tolist())
+
     property_types = sorted(df["property_type"].dropna().unique().tolist()) if "property_type" in df.columns else []
     furnished_opts = sorted(df["furnishing_status"].dropna().unique().tolist()) if "furnishing_status" in df.columns else []
 
