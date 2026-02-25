@@ -1,12 +1,13 @@
 import { Card } from 'react-bootstrap'
-import { formatPrice } from '../api'
+import { formatPrice, listingLabel } from '../api'
 
 export default function ListingCard({ item, onClick, index }) {
+  // Backend fields: price, beds, baths, sqm, floor, property_type, neighborhood, city
   const meta = [
-    item.sqm       && `${item.sqm} m²`,
-    item.bedrooms  != null && `${item.bedrooms} dhoma`,
-    item.bathrooms != null && `${item.bathrooms} banje`,
-    item.floor     != null && `Kati ${item.floor}`,
+    item.sqm   != null && `${item.sqm} m²`,
+    item.beds  != null && `${item.beds} dhoma`,
+    item.baths != null && `${item.baths} banjo`,
+    item.floor != null && `Kati ${item.floor}`,
   ].filter(Boolean)
 
   return (
@@ -23,16 +24,22 @@ export default function ListingCard({ item, onClick, index }) {
         )}
 
         <div className="card-address">
-          {item.address || 'Adresë e panjohur'}
+          {listingLabel(item)}
         </div>
 
-        <div className="card-price">{formatPrice(item.price_in_euro)}</div>
+        <div className="card-price">{formatPrice(item.price)}</div>
 
         {meta.length > 0 && (
           <div className="d-flex flex-wrap gap-1">
             {meta.map((m) => (
               <span key={m} className="meta-chip">{m}</span>
             ))}
+          </div>
+        )}
+
+        {item.price_per_sqm != null && (
+          <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 'auto' }}>
+            {Math.round(item.price_per_sqm).toLocaleString()} €/m²
           </div>
         )}
       </Card.Body>
