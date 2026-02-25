@@ -53,6 +53,7 @@ RENAME = {
     "main_property_has_parking_space":                      "has_parking_space",
     "main_property_has_terrace":                            "has_terrace",
     "main_property_location_city_zone_city_city_name":      "city",
+    "main_property_location_city_zone_formatted_address":   "address",
     "main_property_price_currency":                         "price_currency",
     "main_property_property_composition_balconies":         "balconies",
     "main_property_property_composition_bathrooms":         "bathrooms",
@@ -68,7 +69,7 @@ RENAME = {
 }
 
 KEEP_COLS = [
-    "description", "price_eur", "area_sqm", "floor",
+    "description", "address", "price_eur", "area_sqm", "floor",
     "bedrooms", "bathrooms", "balconies", "living_rooms",
     "furnishing_status", "has_elevator", "has_parking_space",
     "has_garage", "has_carport", "has_terrace", "has_garden",

@@ -22,6 +22,7 @@ class ListingSummary(BaseModel):
     floor:                Optional[float]
     furnished:            bool
     furnishing_status:    Optional[str]
+    address:              Optional[str]
     neighborhood:         Optional[str]
     neighborhood_cluster: Optional[float]
     property_type:        Optional[str]

@@ -1,4 +1,4 @@
-export const API_BASE = 'http://localhost:8000'
+export const API_BASE = 'http://127.0.0.1:8000'
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -18,16 +18,21 @@ export function formatBool(value) {
 }
 
 /**
- * Build a human-readable location string from backend fields.
- * Backend has no "address" field — we compose from what's available.
+ * Build a human-readable location label for a listing.
+ * Priority: real formatted address → city → property_type only
+ * Never shows the internal "Cluster X" ML label.
  */
 export function listingLabel(item) {
+  // Use the real street/zone address if available
+  if (item.address && item.address.trim()) {
+    return item.address.trim()
+  }
+  // Fallback: property type + city
   const parts = []
   if (item.property_type) parts.push(
     item.property_type.charAt(0).toUpperCase() + item.property_type.slice(1)
   )
-  if (item.neighborhood)  parts.push(item.neighborhood)
-  if (item.city)          parts.push(item.city)
+  if (item.city) parts.push(item.city)
   return parts.join(' · ') || 'Pronë'
 }
 

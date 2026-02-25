@@ -17,6 +17,7 @@ from app.schemas import ListingSummary, ListingDetail, PaginatedListings, Filter
 _SUMMARY_COLS = [
     "id", "price", "sqm", "beds", "baths", "floor",
     "furnished", "furnishing_status",
+    "address",
     "neighborhood", "neighborhood_cluster",
     "property_type", "latitude", "longitude",
     "price_per_sqm", "total_rooms",
