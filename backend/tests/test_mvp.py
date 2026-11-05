@@ -165,3 +165,20 @@ def test_unknown_text_ids_are_404(client, suffix):
 def test_literal_search_and_reversed_range(client):
     assert client.get('/listings?q=[').status_code == 200
     assert client.get('/listings?min_price=100000&max_price=1').json()['total'] == 0
+
+
+def test_location_features_do_not_depend_on_price():
+    import numpy as np
+    import pandas as pd
+    from train_model import feature_engineer
+
+    generator = np.random.default_rng(0)
+    frame = pd.DataFrame({
+        "lat": generator.uniform(41.30, 41.36, 60), "lng": generator.uniform(19.78, 19.86, 60),
+        "bedrooms": 2, "bathrooms": 1, "price_per_sqm": generator.uniform(800, 4000, 60),
+    })
+    changed = frame.copy()
+    changed["price_per_sqm"] = changed["price_per_sqm"].to_numpy()[::-1] * 3
+    first, second = feature_engineer(frame.copy()), feature_engineer(changed)
+    assert (first["neighborhood_cluster"] == second["neighborhood_cluster"]).all()
+    assert np.allclose(first["dist_to_nearest_center"], second["dist_to_nearest_center"])

@@ -146,14 +146,9 @@ def feature_engineer(df: pd.DataFrame) -> pd.DataFrame:
                  if c in df.columns]
     df["total_rooms"] = df[room_cols].sum(axis=1)
 
-    # KMeans clustering on (lat, lng, price_per_sqm) — price weight=0.7
+    # KMeans on coordinates only: price must stay out of every model input, or scores are inflated by target leakage.
     coords = df[["lat", "lng"]].values
-    prices = df["price_per_sqm"].values
-
-    coords_norm = (coords - coords.min(axis=0)) / (coords.max(axis=0) - coords.min(axis=0) + 1e-9)
-    prices_norm = (prices - prices.min()) / (prices.max() - prices.min() + 1e-9)
-
-    features = np.column_stack([coords_norm[:, 0], coords_norm[:, 1], prices_norm * 0.7])
+    features = (coords - coords.min(axis=0)) / (coords.max(axis=0) - coords.min(axis=0) + 1e-9)
 
     kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
     df["neighborhood_cluster"] = kmeans.fit_predict(features)

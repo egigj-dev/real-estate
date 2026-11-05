@@ -49,7 +49,7 @@ A model and its matching scaler are both required. If either is absent, `/listin
 
 `python train_model.py` retains the original workflow: read `data/house_price.json`, clean and engineer features, train XGBoost, then write `data/final_data.json`, `model/model.joblib` and `model/scaler.joblib`. It requires the private raw dataset and was not verified here. This original mode uses its fixed paths; the artifact environment overrides apply to demo training and API loading.
 
-The private pipeline prints evaluation statistics when run. No model metrics are asserted here. Its use of price-derived clustering requires evaluation review before presenting estimates as market valuations.
+The private pipeline prints evaluation statistics when run. No model metrics are asserted here. Location clusters use coordinates only, so that price is not a model input, and earlier models trained with price-derived clusters must be retrained. Do not present estimates as market valuations.
 
 ## API usage
 
@@ -77,6 +77,6 @@ Install pytest and httpx in addition to runtime requirements. From `backend/`:
 PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q
 ```
 
-Offline result: 130 passed. Existing tests and fixtures were retained unchanged. Added regressions cover optional addresses, deterministic generation, data source selection, missing artifacts, model provenance, feature names, input bounds and unknown IDs. Upstream deprecation warnings and feature-name warnings from the existing synthetic scaler fixture remain.
+Offline result: 131 passed. Existing tests and fixtures were retained unchanged. Added regressions cover optional addresses, deterministic generation, data source selection, missing artifacts, model provenance, feature names, input bounds and unknown IDs. Upstream deprecation warnings and feature-name warnings from the existing synthetic scaler fixture remain.
 
 Demo browsing, filters, details, comparables and summaries work without private files or training. Data summaries and demo predictions are not real market evidence. The fixed estimate band is not a confidence interval; comparable rankings are feature distances, not appraisals. Missing coordinates yield `Distance unavailable`. Data is loaded into memory, IDs follow row order, and changes require restart.
