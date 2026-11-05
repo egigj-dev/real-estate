@@ -2,6 +2,7 @@
 train_model.py
 """
 
+import argparse
 import sys
 import warnings
 from math import radians, sin, cos, sqrt, atan2
@@ -276,7 +277,32 @@ def train(X_train, X_test, y_train, y_test):
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+def train_demo():
+    from app.config import DEMO_PATH, MODEL_PATH as output_path, SCALER_PATH as scaler_path
+    from app.data.loader import _load_and_clean
+    from ml import _build_feature_matrix
+
+    df = _load_and_clean(DEMO_PATH)
+    features = _build_feature_matrix(df)
+    scaler = StandardScaler().fit(features)
+    model = XGBRegressor(n_estimators=40, max_depth=3, random_state=42, n_jobs=1)
+    model.fit(scaler.transform(features), np.log1p(df["price"]))
+    model.demo_model_ = True
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    scaler_path.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(model, output_path)
+    joblib.dump(scaler, scaler_path)
+    print(f"SYNTHETIC DEMO MODEL saved to {output_path}; scaler: {scaler_path}")
+    print("For UI demonstration only. No real market performance is measured.")
+
+
 def main():
+    parser = argparse.ArgumentParser(description="Train on private raw data or synthetic demo fixtures.")
+    parser.add_argument("--demo", action="store_true", help="Train a small, explicitly labelled synthetic demo model")
+    args = parser.parse_args()
+    if args.demo:
+        train_demo()
+        return
     if not DATA_PATH.exists():
         print(f"ERROR: {DATA_PATH} not found.")
         print("Place house_price.json in backend/data/ and re-run.")

@@ -4,15 +4,17 @@ All routers and services call get_df() / get_model() through FastAPI Depends().
 """
 
 import json
+import logging
 import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
-from app.config import DATA_PATH, MODEL_PATH
+from app.config import DATA_PATH, DEMO_PATH, USE_DEMO_DATA, MODEL_PATH, SCALER_PATH
+
+logger = logging.getLogger(__name__)
 
 # Raw JSON column → internal name
 _COL_MAP = {
@@ -135,7 +137,8 @@ def _load_and_clean(path: Path) -> pd.DataFrame:
     )
 
     # ── address extracted from description text ──────────────────────────────
-    df["address"] = df["description"].apply(_extract_address)
+    extracted = df["description"].apply(_extract_address)
+    df["address"] = df.get("address", extracted).replace(r"^\s*$", None, regex=True).fillna(extracted)
 
     # ── stable string id ────────────────────────────────────────────────────
     df["id"] = df.index.astype(str)
@@ -146,21 +149,22 @@ def _load_and_clean(path: Path) -> pd.DataFrame:
 @lru_cache(maxsize=1)
 def get_df() -> pd.DataFrame:
     """Return the cached, cleaned DataFrame. Loaded once at first call."""
-    if not DATA_PATH.exists():
-        raise FileNotFoundError(
-            f"Dataset not found: {DATA_PATH.resolve()}. "
-            "Set DATA_PATH env-var or place final_data.json in backend/data/."
-        )
-    df = _load_and_clean(DATA_PATH)
-    print(f"[loader] {len(df)} listings loaded from {DATA_PATH}")
+    is_demo = USE_DEMO_DATA or not DATA_PATH.exists()
+    path = DEMO_PATH if is_demo else DATA_PATH
+    df = _load_and_clean(path)
+    df.attrs["data_source"] = "demo" if is_demo else "private"
+    if is_demo:
+        logger.warning("SYNTHETIC DEMO DATA in use: %s (%s listings)", path, len(df))
+    else:
+        logger.info("Loaded %s private listings from %s", len(df), path)
     return df
 
 
 @lru_cache(maxsize=1)
 def get_model() -> Any | None:
     """Return the cached sklearn model, or None if not yet trained."""
-    if not MODEL_PATH.exists():
-        print(f"[loader] WARNING: model not found at {MODEL_PATH} — run train_model.py")
+    if not MODEL_PATH.exists() or not SCALER_PATH.exists():
+        logger.warning("Estimates unavailable: model/scaler pair missing at %s / %s", MODEL_PATH, SCALER_PATH)
         return None
     import joblib
     model = joblib.load(MODEL_PATH)

@@ -73,18 +73,19 @@ function CompCard({ comp, onSelect }) {
 export default function DetailPage({ id, onBack, onSelect }) {
   const [item,     setItem]     = useState(null)
   const [estimate, setEstimate] = useState(null)
+  const [estimateError, setEstimateError] = useState(null)
   const [comps,    setComps]    = useState(null)
   const [loading,  setLoad]     = useState(true)
   const [error,    setError]    = useState(null)
 
   useEffect(() => {
     if (!id) return
-    setLoad(true); setError(null); setItem(null); setEstimate(null); setComps(null)
+    setLoad(true); setError(null); setEstimateError(null); setItem(null); setEstimate(null); setComps(null)
 
     // Load all three in parallel; estimate/comps failures are non-fatal
     Promise.all([
       fetchListing(id),
-      fetchEstimate(id).catch(() => null),
+      fetchEstimate(id).catch(e => { setEstimateError(e.message); return null }),
       fetchComps(id).catch(() => null),
     ])
       .then(([listing, est, cmps]) => {
@@ -190,6 +191,11 @@ export default function DetailPage({ id, onBack, onSelect }) {
           </Card>
 
           {/* ── ML Estimate card ─────────────────────────────────────────── */}
+          {estimateError && (
+            <div className="err-box mb-4" role="status">
+              Vlerësimi ML nuk është i disponueshëm. {estimateError}
+            </div>
+          )}
           {estimate && (
             <Card className="detail-panel mb-4">
               <Card.Body className="p-4">
@@ -197,6 +203,9 @@ export default function DetailPage({ id, onBack, onSelect }) {
                   🤖 Vlerësimi ML i Çmimit
                 </div>
 
+                {estimate.demo_model && (
+                  <p role="status">Model demo sintetik. Vetëm për demonstrim; nuk është vlerësim tregu.</p>
+                )}
                 <Row className="g-3 align-items-center">
                   {/* Estimated price */}
                   <Col xs={12} sm={4}>

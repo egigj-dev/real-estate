@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
     try:
         df    = get_df()
         model = get_model()
-        status = "ready" if model else "no model — run train_model.py"
+        status = "ready" if model else "unavailable — see backend/README.md"
         print(f"[startup] {len(df)} listings loaded. Model: {status}")
     except FileNotFoundError as exc:
         print(f"[startup] WARNING — {exc}")
@@ -74,4 +74,6 @@ def health(df=Depends(get_df), model=Depends(get_model)):
         "status":          "ok",
         "listings_loaded": len(df),
         "model_loaded":    model is not None,
+        "data_source":     df.attrs.get("data_source", "unknown"),
+        "demo_model":      bool(getattr(model, "demo_model_", False)),
     }

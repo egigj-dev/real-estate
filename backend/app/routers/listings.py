@@ -6,7 +6,7 @@ GET /listings/{id}       — full detail
 GET /filters/options     — dynamic dropdown values for the frontend
 """
 
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 
@@ -27,16 +27,16 @@ def list_listings(
     # ── free-text ─────────────────────────────────────────────────────────────
     q:             Optional[str]   = Query(default=None, description="Search in description, property type, city"),
     # ── price ─────────────────────────────────────────────────────────────────
-    min_price:     Optional[float] = Query(default=None, description="Min price (EUR)"),
-    max_price:     Optional[float] = Query(default=None, description="Max price (EUR)"),
+    min_price:     Optional[float] = Query(default=None, ge=0, allow_inf_nan=False, description="Min price (EUR)"),
+    max_price:     Optional[float] = Query(default=None, ge=0, allow_inf_nan=False, description="Max price (EUR)"),
     # ── beds / baths ──────────────────────────────────────────────────────────
     min_beds:      Optional[int]   = Query(default=None, ge=0),
     max_beds:      Optional[int]   = Query(default=None, ge=0),
-    min_baths:     Optional[float] = Query(default=None, ge=0),
-    max_baths:     Optional[float] = Query(default=None, ge=0),
+    min_baths:     Optional[float] = Query(default=None, ge=0, allow_inf_nan=False),
+    max_baths:     Optional[float] = Query(default=None, ge=0, allow_inf_nan=False),
     # ── size ──────────────────────────────────────────────────────────────────
-    min_sqm:       Optional[float] = Query(default=None, ge=0),
-    max_sqm:       Optional[float] = Query(default=None, ge=0),
+    min_sqm:       Optional[float] = Query(default=None, ge=0, allow_inf_nan=False),
+    max_sqm:       Optional[float] = Query(default=None, ge=0, allow_inf_nan=False),
     # ── amenity booleans ──────────────────────────────────────────────────────
     furnished:         Optional[bool] = Query(default=None, description="true = fully/partially furnished"),
     has_elevator:      Optional[bool] = Query(default=None),
@@ -46,7 +46,7 @@ def list_listings(
     neighborhood:  Optional[str]   = Query(default=None, description="e.g. 'Cluster 0'"),
     property_type: Optional[str]   = Query(default=None, description="e.g. 'apartment'"),
     # ── sort ──────────────────────────────────────────────────────────────────
-    sort:          Optional[str]   = Query(default=None, description="'price_asc' | 'price_desc'"),
+    sort:          Optional[Literal["price_asc", "price_desc"]]   = Query(default=None, description="'price_asc' | 'price_desc'"),
     # ── pagination ────────────────────────────────────────────────────────────
     page:     int = Query(default=DEFAULT_PAGE,     ge=1),
     per_page: int = Query(default=DEFAULT_PER_PAGE, ge=1, le=MAX_PER_PAGE),

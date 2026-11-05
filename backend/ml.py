@@ -3,12 +3,13 @@ ML utilities: price estimation and comparable listings
 """
 
 import math
-from pathlib import Path
 from typing import Any
 
 import joblib
 import numpy as np
 import pandas as pd
+
+from app.config import SCALER_PATH as _SCALER_PATH
 
 # ---------------------------------------------------------------------------
 # Feature columns — order matters for scaler
@@ -30,7 +31,6 @@ RANGE_BAND            = 0.08   # ±8 %
 # ---------------------------------------------------------------------------
 # Scaler path (loaded lazily so ml.py can be imported without the file)
 # ---------------------------------------------------------------------------
-_SCALER_PATH = Path(__file__).resolve().parent / "model" / "scaler.joblib"
 _scaler_cache = None
 
 
@@ -55,11 +55,12 @@ def _build_feature_matrix(df: pd.DataFrame) -> pd.DataFrame:
     that StandardScaler.transform() doesn't emit a 'no feature names' warning
     when the scaler was originally fitted on a named DataFrame.
     """
-    tmp = df.copy()
+    tmp = df.rename(columns={"sqm": "area_sqm", "beds": "bedrooms", "baths": "bathrooms"}).copy()
     for col in FEATURE_COLS:
         if col in tmp.columns:
             tmp[col] = pd.to_numeric(tmp[col], errors="coerce")
-            tmp[col] = tmp[col].fillna(tmp[col].median())
+            fallback = tmp[col].median() if tmp[col].notna().any() else 0.0
+            tmp[col] = tmp[col].fillna(fallback)
         else:
             tmp[col] = 0.0
     return tmp[FEATURE_COLS].astype(float)
@@ -76,7 +77,7 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 def _distance_label(km: float | None) -> str:
-    if km is None:   return "Nearby"
+    if km is None or not math.isfinite(km): return "Distance unavailable"
     if km < 1:       return "< 1 km"
     if km < 3:       return "1-3 km"
     if km < 7:       return "3-7 km"
@@ -190,7 +191,7 @@ def get_comps(listing_id: Any, df: pd.DataFrame, n: int = 5) -> list[dict]:
     dists      = np.linalg.norm(norm - target_vec, axis=1)
     dists[df.index.get_loc(idx)] = np.inf   # exclude self
 
-    nearest = np.argsort(dists)[:n]
+    nearest = np.argsort(dists)[:min(n, len(df) - 1)]
     has_coords = {"latitude", "longitude"}.issubset(df.columns)
 
     comps = []

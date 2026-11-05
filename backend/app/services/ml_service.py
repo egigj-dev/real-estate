@@ -18,7 +18,7 @@ from ml import get_estimate as _get_estimate, get_comps as _get_comps
 
 def estimate(listing_id: str, df: pd.DataFrame, model: Any) -> EstimateResponse:
     result = _get_estimate(listing_id, df, model)
-    return EstimateResponse(listing_id=listing_id, **result)
+    return EstimateResponse(listing_id=listing_id, demo_model=bool(getattr(model, "demo_model_", False)), **result)
 
 
 def comps(listing_id: str, df: pd.DataFrame, n: int = 5) -> CompsResponse:

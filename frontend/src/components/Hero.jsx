@@ -11,18 +11,14 @@ export default function Hero({ total }) {
             në Tiranë
           </h1>
           <p className="hero-sub">
-            Shfleto mbi {total > 0 ? total.toLocaleString() : '—'} prona të
-            disponueshme — apartamente, zyra, vila dhe më shumë. Filtro sipas
+            Shfleto {total > 0 ? total.toLocaleString() : '—'} prona në
+            dataset. Filtro sipas
             adresës, çmimit dhe karakteristikave.
           </p>
           <div className="d-flex gap-4 mt-4 flex-wrap">
             <div className="hero-stat">
               <strong>{total > 0 ? total.toLocaleString() : '…'}</strong>
-              <span>Lista Aktive</span>
-            </div>
-            <div className="hero-stat">
-              <strong>24/7</strong>
-              <span>Të Disponueshme</span>
+              <span>Prona në dataset</span>
             </div>
             <div className="hero-stat">
               <strong>EUR €</strong>

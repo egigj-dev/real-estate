@@ -1,4 +1,4 @@
-export const API_BASE = 'http://127.0.0.1:8000'
+export const API_BASE = import.meta.env?.VITE_API_BASE || 'http://127.0.0.1:8000'
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -24,7 +24,7 @@ export function formatBool(value) {
  */
 export function listingLabel(item) {
   // Use the real street/zone address if available
-  if (item.address && item.address.trim()) {
+  if (typeof item.address === 'string' && item.address.trim()) {
     return item.address.trim()
   }
   // Fallback: property type + city
@@ -120,6 +120,15 @@ export async function fetchListing(id) {
 /** GET /listings/:id/estimate → { listing_id, estimated_price, range_low, range_high, label } */
 export async function fetchEstimate(id) {
   const res = await fetch(`${API_BASE}/listings/${encodeURIComponent(id)}/estimate`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function fetchHealth() {
+  const res = await fetch(`${API_BASE}/health`)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }

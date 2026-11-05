@@ -22,7 +22,7 @@ class ListingSummary(BaseModel):
     floor:                Optional[float]
     furnished:            bool
     furnishing_status:    Optional[str]
-    address:              Optional[str]
+    address:              Optional[str] = None
     neighborhood:         Optional[str]
     neighborhood_cluster: Optional[float]
     property_type:        Optional[str]
@@ -66,6 +66,7 @@ class PaginatedListings(BaseModel):
 
 class EstimateResponse(BaseModel):
     listing_id:      str
+    demo_model:      bool = False
     estimated_price: float
     range_low:       float
     range_high:      float
