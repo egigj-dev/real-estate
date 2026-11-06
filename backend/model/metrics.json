@@ -1,0 +1,12 @@
+{
+  "mae_eur": 41039.77205324636,
+  "median_ape_pct": 15.950532603408519,
+  "mape_pct": 24.317172260215415,
+  "r2": 0.6248419009059196,
+  "share_within_10_pct": 0.3337378640776699,
+  "share_within_20_pct": 0.5934466019417476,
+  "n_train": 3303,
+  "n_test": 824,
+  "split": "GroupShuffleSplit(test_size=0.2, random_state=42), grouped by price rounded to euros, area to 0.1 sqm, lat/lng to 4 decimals, and floor; 10% of training rows reserved for early stopping",
+  "training_date": "2026-11-06T02:14:19.605562+00:00"
+}

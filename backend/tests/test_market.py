@@ -74,3 +74,14 @@ class TestHealth:
     def test_model_loaded(self, client):
         body = client.get("/health").json()
         assert body["model_loaded"] is True
+
+
+def test_health_includes_model_metrics(client, tmp_path, monkeypatch):
+    import json
+    import main
+    path = tmp_path / "metrics.json"
+    monkeypatch.setattr(main, "METRICS_PATH", path)
+    assert client.get("/health").json()["model_metrics"] is None
+    metrics = {"median_ape_pct": 18.2, "r2": 0.68}
+    path.write_text(json.dumps(metrics))
+    assert client.get("/health").json()["model_metrics"] == metrics

@@ -123,3 +123,9 @@ Labels: **Fair** / **Overpriced** / **Underpriced** based on cluster-specific th
 ```bash
 pytest -v
 ```
+
+## Model evaluation
+
+Results from a grouped held-out 20% test split (3,303 training rows, including the 10% early-stopping validation carve-out; 824 test rows), trained on 2026-11-06: MAE €41,039.77, median absolute percentage error 15.95%, MAPE 24.32%, R² 0.6248, 33.37% within 10% and 59.34% within 20%.
+
+Zones come from location only, using six KMeans clusters fitted on training coordinates.

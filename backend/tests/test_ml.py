@@ -37,14 +37,37 @@ class TestEstimate:
         assert body["range_low"] < body["estimated_price"]
         assert body["estimated_price"] < body["range_high"]
 
-    def test_range_band_is_roughly_8_percent(self, client):
+    def test_range_uses_saved_zone_p75_band(self, client, fake_df):
+        import ml
+        import numpy as np
         body = client.get("/listings/0/estimate").json()
+        zone = int(fake_df.loc[0, "neighborhood_cluster"])
+        bands = ml._get_bands()
+        saved = bands.get(zone) or bands.get("global") or {}
+        band = float(np.clip(saved.get("p75_rel_error", ml.RANGE_BAND), 0.08, 0.35))
         est = body["estimated_price"]
-        low = body["range_low"]
-        high = body["range_high"]
-        # ±8% → low ≈ est * 0.92, high ≈ est * 1.08
-        assert abs(low  - est * 0.92) / est < 0.01
-        assert abs(high - est * 1.08) / est < 0.01
+        assert body["range_low"] == pytest.approx(est * (1 - band), abs=0.02)
+        assert body["range_high"] == pytest.approx(est * (1 + band), abs=0.02)
+
+    @pytest.mark.parametrize("p50, expected", [(0.02, 10), (0.22, 22), (0.5, 30)])
+    def test_p50_threshold(self, client, fake_df, fake_model, monkeypatch, p50, expected):
+        import ml
+        zone = int(fake_df.loc[0, "neighborhood_cluster"])
+        monkeypatch.setattr(ml, "_bands_cache", {zone: {
+            "p50_rel_error": p50, "median_rel_error": 0.15, "p75_rel_error": 0.25,
+        }})
+        df = fake_df.copy()
+        df["price"] = df["price"].astype(float)
+        initial = ml.get_estimate("0", df, fake_model)
+        df.loc[0, "price"] = initial["estimated_price"] * 1.20
+        result = ml.get_estimate("0", df, fake_model)
+        assert result["threshold_pct"] == expected
+        assert result["label"] == ("Overpriced" if expected < 20 else "Fair")
+
+    def test_legacy_median_threshold(self, client, fake_df, fake_model, monkeypatch):
+        import ml
+        monkeypatch.setattr(ml, "_bands_cache", {"global": {"median_rel_error": 0.24}})
+        assert ml.get_estimate("0", fake_df, fake_model)["threshold_pct"] == 24
 
     def test_label_is_valid(self, client):
         for lid in ["0", "1", "2", "3", "4"]:

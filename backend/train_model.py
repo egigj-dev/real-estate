@@ -1,23 +1,7 @@
-"""
-train_model.py
-==============
-Run:  python train_model.py
+"""Train and evaluate with grouped held-out listings and location-only zones."""
 
-Clustering strategy
--------------------
-Two knobs at the top of this file:
-
-  N_CLUSTERS   = 3     (or 4, 5, 6 — see explore_clusters.py for RMSE comparison)
-  HIERARCHICAL = False (True = 3 parent zones × 2 sub-zones = 6 total)
-
-Key fix: cluster IDs are RE-LABELLED after KMeans so that
-  ID 0 = cheapest median €/m² zone  →  ID N-1 = most expensive
-
-This makes neighborhood_cluster a meaningful ordinal feature for XGBoost
-instead of random integers.  A zone_config.joblib is saved so ml.py can
-resolve cluster_id → zone name consistently without string matching.
-"""
-
+import json
+from datetime import datetime, timezone
 import sys
 import warnings
 from math import radians, sin, cos, sqrt, atan2
@@ -26,22 +10,15 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
-from scipy.spatial.distance import cdist
 from sklearn.cluster import KMeans
-from sklearn.compose import ColumnTransformer
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.model_selection import GroupShuffleSplit, train_test_split
+from sklearn.preprocessing import StandardScaler
 from xgboost import XGBRegressor
 
 warnings.filterwarnings("ignore")
 
-# ---------------------------------------------------------------------------
-# KNOBS — set after running explore_clusters.py
-# ---------------------------------------------------------------------------
-N_CLUSTERS   = 3      # flat KMeans k
-HIERARCHICAL = True   # 3 parent x 2 sub = 6 total zones
-# ---------------------------------------------------------------------------
+N_CLUSTERS = 6
 
 BASE_DIR    = Path(__file__).resolve().parent
 DATA_PATH   = BASE_DIR / "data" / "house_price.json"
@@ -105,20 +82,18 @@ def haversine_km(lat1, lon1, lat2, lon2):
     return 6371 * 2 * atan2(sqrt(a), sqrt(1-a))
 
 
-def _cluster_features(df: pd.DataFrame) -> np.ndarray:
-    coords = df[["lat","lng"]].values
-    prices = df["price_per_sqm"].fillna(df["price_per_sqm"].median()).values
-    cn = (coords - coords.min(0)) / (coords.max(0) - coords.min(0) + 1e-9)
-    pn = (prices - prices.min()) / (prices.max() - prices.min() + 1e-9)
-    return np.column_stack([cn[:,0], cn[:,1], pn * 0.7])
+def duplicate_groups(df: pd.DataFrame) -> pd.Series:
+    """Stable duplicate keys, including rounded coordinates and listing attributes."""
+    keys = df[["price_eur", "area_sqm", "lat", "lng", "floor"]].copy()
+    for col, decimals in [("price_eur", 0), ("area_sqm", 1), ("lat", 4), ("lng", 4)]:
+        keys[col] = keys[col].round(decimals)
+    return pd.Series(pd.factorize(pd.MultiIndex.from_frame(keys))[0], index=df.index)
 
 
-def _sort_by_price(df: pd.DataFrame, col: str) -> tuple:
-    """Re-label so ID 0 = cheapest, ID N-1 = most expensive."""
-    medians = df.groupby(col)["price_per_sqm"].median().sort_values()
-    mapping = {int(old): int(new) for new, old in enumerate(medians.index)}
-    df[col] = df[col].map(mapping)
-    return df, mapping
+def grouped_split(df: pd.DataFrame):
+    splitter = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+    train_pos, test_pos = next(splitter.split(df, groups=duplicate_groups(df)))
+    return df.index[train_pos], df.index[test_pos]
 
 
 def _auto_zone_names(n: int) -> dict:
@@ -178,7 +153,8 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Step 3 — Feature engineering + clustering
 # ---------------------------------------------------------------------------
-def feature_engineer(df: pd.DataFrame) -> tuple:
+def feature_engineer(df: pd.DataFrame, train_index) -> tuple:
+    df = df.copy()
     print("\nFeature engineering ...")
 
     room_cols = [c for c in ["bedrooms","bathrooms","living_rooms","kitchens","balconies"]
@@ -193,39 +169,20 @@ def feature_engineer(df: pd.DataFrame) -> tuple:
 
     df["price_per_sqm"] = df["price_eur"] / df["area_sqm"].replace(0, np.nan)
 
-    cf = _cluster_features(df)
-
-    if HIERARCHICAL:
-        parent_km = KMeans(n_clusters=3, random_state=42, n_init=10)
-        parents   = parent_km.fit_predict(cf)
-        df["neighborhood_cluster"] = -1.0
-        sub_id = 0
-        centers_list = []
-        for p in sorted(np.unique(parents)):
-            mask     = parents == p
-            child_km = KMeans(n_clusters=2, random_state=42, n_init=10)
-            child_lb = child_km.fit_predict(cf[mask])
-            parent_indices = np.where(mask)[0]
-            for cid in [0, 1]:
-                target_indices = parent_indices[child_lb == cid]
-                df.iloc[target_indices, df.columns.get_loc("neighborhood_cluster")] = float(sub_id)
-                centers_list.append(child_km.cluster_centers_[cid])
-                sub_id += 1
-        centers    = np.array(centers_list)
-        n_clusters = 6
-        print(f"  Hierarchical 3×2 = {n_clusters} zones")
-    else:
-        km = KMeans(n_clusters=N_CLUSTERS, random_state=42, n_init=10)
-        df["neighborhood_cluster"] = km.fit_predict(cf).astype(float)
-        centers    = km.cluster_centers_
-        n_clusters = N_CLUSTERS
-        print(f"  Flat KMeans k={n_clusters}")
-
-    dists = cdist(cf, centers)
-    df["dist_to_nearest_center"] = dists.min(1)
-
-    # Re-sort cluster IDs by ascending median price_per_sqm
-    df, mapping = _sort_by_price(df, "neighborhood_cluster")
+    km = KMeans(n_clusters=N_CLUSTERS, random_state=42, n_init=10)
+    km.fit(df.loc[train_index, ["lat", "lng"]])
+    raw_labels = km.predict(df[["lat", "lng"]])
+    training = df.loc[train_index].copy()
+    training["raw_cluster"] = km.predict(training[["lat", "lng"]])
+    medians = training.groupby("raw_cluster")["price_per_sqm"].median().sort_values()
+    mapping = {int(old): new for new, old in enumerate(medians.index)}
+    df["neighborhood_cluster"] = [mapping[int(label)] for label in raw_labels]
+    centers = km.cluster_centers_[medians.index.to_numpy()]
+    df["dist_to_nearest_center"] = [
+        haversine_km(lat, lng, *centers[int(cid)])
+        for lat, lng, cid in df[["lat", "lng", "neighborhood_cluster"]].itertuples(index=False, name=None)
+    ]
+    n_clusters = N_CLUSTERS
 
     # Zone names from price rank
     zone_names = _auto_zone_names(n_clusters)
@@ -236,8 +193,9 @@ def feature_engineer(df: pd.DataFrame) -> tuple:
 
     # Build cluster stats for zone_config
     cluster_stats = {}
-    for cid in sorted(df["neighborhood_cluster"].unique()):
-        cdf = df[df["neighborhood_cluster"] == cid]
+    training = df.loc[train_index]
+    for cid in sorted(training["neighborhood_cluster"].unique()):
+        cdf = training[training["neighborhood_cluster"] == cid]
         cluster_stats[int(cid)] = {
             "count":           int(len(cdf)),
             "mean_price":      float(cdf["price_eur"].mean()),
@@ -251,7 +209,7 @@ def feature_engineer(df: pd.DataFrame) -> tuple:
 
     zone_cfg = {
         "n_clusters":           n_clusters,
-        "hierarchical":         HIERARCHICAL,
+        "centers":              centers.tolist(),
         "price_sorted_mapping": mapping,
         "cluster_stats":        cluster_stats,
         "zone_names":           zone_names,
@@ -269,58 +227,17 @@ def feature_engineer(df: pd.DataFrame) -> tuple:
 
 
 # ---------------------------------------------------------------------------
-# Step 4 — Encode
+# Step 4 — Scale the fixed feature columns using training rows only
 # ---------------------------------------------------------------------------
-def encode(df: pd.DataFrame) -> pd.DataFrame:
-    print("\nEncoding ...")
-
-    numerical = [
-        "area_sqm", "floor", "bedrooms", "bathrooms", "balconies", "living_rooms",
-        "has_elevator", "has_parking_space", "has_garage", "has_carport",
-        "has_terrace", "has_garden",
-        "lat", "lng", "distance_from_center", "dist_to_nearest_center",
-        "neighborhood_cluster", "total_rooms",
-    ]
-    categorical = ["furnishing_status", "property_type", "property_status"]
-
-    numerical   = [c for c in numerical   if c in df.columns]
-    categorical = [c for c in categorical if c in df.columns]
-
-    preprocessor = ColumnTransformer(
-        transformers=[
-            ("num", "passthrough", numerical),
-            ("cat", OneHotEncoder(sparse_output=False, handle_unknown="ignore", drop="first"), categorical),
-        ],
-        remainder="drop",
-    )
-
-    X_full    = preprocessor.fit_transform(df)
-    cat_names = list(preprocessor.named_transformers_["cat"].get_feature_names_out(categorical))
-
-    df_encoded = pd.DataFrame(X_full, columns=numerical + cat_names, index=df.index)
-    print(f"  Encoded shape: {df_encoded.shape}")
-    return df_encoded
-
-
-# ---------------------------------------------------------------------------
-# Step 5 — Scale + split
-# ---------------------------------------------------------------------------
-def scale_and_split(df_encoded: pd.DataFrame, y: pd.Series):
-    print("\nScaling ...")
-    feature_cols = [c for c in FEATURE_COLS if c in df_encoded.columns]
-    X = df_encoded[feature_cols].copy()
-
-    mask = ~(X.isnull().any(axis=1) | y.isnull())
-    X, y = X[mask], y[mask]
-
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    print(f"  Train: {len(X_train):,}  |  Test: {len(X_test):,}")
-
-    scaler    = StandardScaler()
-    X_train_s = pd.DataFrame(scaler.fit_transform(X_train), columns=feature_cols, index=X_train.index)
-    X_test_s  = pd.DataFrame(scaler.transform(X_test),      columns=feature_cols, index=X_test.index)
-
-    return X_train_s, X_test_s, y_train, y_test, scaler
+def scale_and_split(df: pd.DataFrame, train_index, test_index):
+    X = df[FEATURE_COLS].astype(float)
+    y = df["price_eur"]
+    if X.isna().any().any() or y.isna().any():
+        raise ValueError("Cleaned model features and targets must be complete")
+    scaler = StandardScaler()
+    X_train = pd.DataFrame(scaler.fit_transform(X.loc[train_index]), columns=FEATURE_COLS, index=train_index)
+    X_test = pd.DataFrame(scaler.transform(X.loc[test_index]), columns=FEATURE_COLS, index=test_index)
+    return X_train, X_test, y.loc[train_index], y.loc[test_index], scaler
 
 
 # ---------------------------------------------------------------------------
@@ -407,15 +324,28 @@ def main():
 
     df           = load_raw(DATA_PATH)
     df           = clean(df)
-    df, zone_cfg = feature_engineer(df)
-    df_enc       = encode(df)
-    y            = df["price_eur"].copy()
-
-    X_train, X_test, y_train, y_test, scaler = scale_and_split(df_enc, y)
+    train_index, test_index = grouped_split(df)
+    df, zone_cfg = feature_engineer(df, train_index)
+    X_train, X_test, y_train, y_test, scaler = scale_and_split(df, train_index, test_index)
     model       = train(X_train, X_test, y_train, y_test)
-    price_bands = compute_price_bands(df, model, scaler)
+    price_bands = compute_price_bands(df.loc[test_index], model, scaler)
 
+    predictions = np.expm1(model.predict(X_test))
+    rel_error = np.abs(predictions - y_test.to_numpy()) / y_test.to_numpy()
+    metrics = {
+        "mae_eur": float(mean_absolute_error(y_test, predictions)),
+        "median_ape_pct": float(np.median(rel_error) * 100),
+        "mape_pct": float(np.mean(rel_error) * 100),
+        "r2": float(r2_score(y_test, predictions)),
+        "share_within_10_pct": float(np.mean(rel_error <= 0.10)),
+        "share_within_20_pct": float(np.mean(rel_error <= 0.20)),
+        "n_train": len(train_index),
+        "n_test": len(test_index),
+        "split": "GroupShuffleSplit(test_size=0.2, random_state=42), grouped by price rounded to euros, area to 0.1 sqm, lat/lng to 4 decimals, and floor; 10% of training rows reserved for early stopping",
+        "training_date": datetime.now(timezone.utc).isoformat(),
+    }
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
+    (MODEL_DIR / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
     joblib.dump(model,       MODEL_PATH)
     joblib.dump(scaler,      SCALER_PATH)
     joblib.dump(zone_cfg,    ZONE_CFG)

@@ -8,7 +8,7 @@ import ZoneInfoPanel, { type ZoneData, type ZoneInsight } from "@/components/Zon
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { fetchHealth, fetchAreas, fetchMarketInsights, fetchListingsSample } from "@/lib/api"
-import type { Area, ListingSummary } from "@/lib/types"
+import type { Area, ListingSummary, HealthResponse } from "@/lib/types"
 
 const ZoneMap = dynamic(() => import("@/components/ZoneMap"), { ssr: false })
 
@@ -102,7 +102,7 @@ function NeighborhoodCard({ name, price, count, rank, onClick }: { name: string;
 
 export default function OverviewPage() {
   const router = useRouter()
-  const [health, setHealth] = useState<{ listings_loaded: number } | null>(null)
+  const [health, setHealth] = useState<HealthResponse | null>(null)
   const [areas, setAreas] = useState<Area[]>([])
   const [insights, setInsights] = useState<{ overall_median_price_per_sqm: number } | null>(null)
   const [sample, setSample] = useState<ListingSummary[]>([])
@@ -185,9 +185,9 @@ export default function OverviewPage() {
               <div className="text-[10.5px] text-muted-foreground">Zona Çmimi</div>
             </div>
             <div className="rounded-lg border border-border bg-muted p-3 text-center">
-              <div className="text-lg font-bold text-foreground">98%</div>
-              <div className="text-[10.5px] text-muted-foreground">Saktësia e Modelit</div>
-              <div className="text-[9px] text-muted-foreground/70">vlerë ilustruese</div>
+              <div className="text-lg font-bold text-foreground">{health?.model_metrics?.median_ape_pct != null ? `±${Math.round(health.model_metrics.median_ape_pct)}%` : "—"}</div>
+              <div className="text-[10.5px] text-muted-foreground">Gabimi tipik</div>
+              <div className="text-[9px] text-muted-foreground/70">në prona të patestuara</div>
             </div>
           </div>
         </Card>

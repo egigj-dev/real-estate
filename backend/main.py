@@ -14,6 +14,8 @@ Architecture
   ml.py                   ← ML utilities (estimate, comps)
 """
 
+import json
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
@@ -72,10 +74,15 @@ app.include_router(chat.router)              # POST /chat/parse
 # ---------------------------------------------------------------------------
 # Health — uses Depends so test dependency_overrides apply automatically
 # ---------------------------------------------------------------------------
+METRICS_PATH = Path(__file__).resolve().parent / "model" / "metrics.json"
+
+
 @app.get("/health", tags=["Health"])
 def health(df=Depends(get_df), model=Depends(get_model)):
+    metrics = json.loads(METRICS_PATH.read_text()) if METRICS_PATH.exists() else None
     return {
         "status":          "ok",
+        "model_metrics":   metrics,
         "listings_loaded": len(df),
         "model_loaded":    model is not None,
     }

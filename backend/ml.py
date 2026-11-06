@@ -210,7 +210,7 @@ def get_estimate(listing_id: Any, df: pd.DataFrame, model: Any) -> dict:
     # Median relative error → labeling threshold
     # Floor at 10% so we don't over-flag small deviations
     threshold_pct = float(np.clip(
-        cluster_bands.get("median_rel_error", RANGE_BAND),
+        cluster_bands.get("p50_rel_error", cluster_bands.get("median_rel_error", RANGE_BAND)),
         0.10, 0.30
     ))
 

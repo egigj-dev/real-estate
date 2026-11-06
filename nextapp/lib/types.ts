@@ -135,7 +135,21 @@ export interface Area {
   polygon: [number, number][] // [lat, lon] pairs
 }
 
+export interface ModelMetrics {
+  mae_eur: number
+  median_ape_pct: number
+  mape_pct: number
+  r2: number
+  share_within_10_pct: number
+  share_within_20_pct: number
+  n_train: number
+  n_test: number
+  split: string
+  training_date: string
+}
+
 export interface HealthResponse {
+  model_metrics: ModelMetrics | null
   status: string
   listings_loaded: number
   model_loaded: boolean
