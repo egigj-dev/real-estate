@@ -18,8 +18,7 @@ MODEL_PATH = Path(os.getenv("MODEL_PATH", str(BASE_DIR / "model/model.joblib")))
 # CORS
 # ---------------------------------------------------------------------------
 CORS_ORIGINS: list[str] = os.getenv(
-    "CORS_ORIGINS",
-    "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8000,http://127.0.0.1:8000"
+    "CORS_ORIGINS", "http://localhost:5173,http://localhost:3000"
 ).split(",")
 
 # ---------------------------------------------------------------------------
@@ -27,7 +26,7 @@ CORS_ORIGINS: list[str] = os.getenv(
 # ---------------------------------------------------------------------------
 DEFAULT_PAGE     = 1
 DEFAULT_PER_PAGE = 20
-MAX_PER_PAGE     = 100
+MAX_PER_PAGE     = 500
 
 # ---------------------------------------------------------------------------
 # ML constants   (kept in sync with ml/ml.py)

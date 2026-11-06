@@ -21,7 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import CORS_ORIGINS
 from app.data.loader import get_df, get_model
-from app.routers import comps, estimates, listings, market
+from app.routers import comps, estimates, listings, market, suggest, predict, chat
 
 
 # ---------------------------------------------------------------------------
@@ -60,9 +60,13 @@ app.add_middleware(
 # Routers
 app.include_router(listings.router)          # GET /listings, GET /listings/{id}
 app.include_router(listings.filters_router)  # GET /filters/options
+app.include_router(listings.areas_router)    # GET /areas
 app.include_router(estimates.router)         # GET /listings/{id}/estimate
 app.include_router(comps.router)             # GET /listings/{id}/comps
 app.include_router(market.router)            # GET /market/insights
+app.include_router(suggest.router)           # POST /suggest
+app.include_router(predict.router)           # POST /predict/by-zone
+app.include_router(chat.router)              # POST /chat/parse
 
 
 # ---------------------------------------------------------------------------
