@@ -12,7 +12,11 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 BASE_DIR   = Path(__file__).resolve().parent.parent        # backend/
 DATA_PATH  = Path(os.getenv("DATA_PATH",  str(BASE_DIR / "data/final_data.json")))
+DEMO_PATH  = BASE_DIR / "demo/listings.json"
+USE_DEMO_DATA = os.getenv("USE_DEMO_DATA", "").strip().lower() in {"1", "true", "yes", "on"}
 MODEL_PATH = Path(os.getenv("MODEL_PATH", str(BASE_DIR / "model/model.joblib")))
+
+
 
 # ---------------------------------------------------------------------------
 # CORS

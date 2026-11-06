@@ -1,6 +1,6 @@
 """
 main.py — FastAPI entry-point
-==============================
+------------------------------
 Run:  uvicorn main:app --reload --port 8000
 
 Architecture
@@ -79,9 +79,11 @@ METRICS_PATH = Path(__file__).resolve().parent / "model" / "metrics.json"
 
 @app.get("/health", tags=["Health"])
 def health(df=Depends(get_df), model=Depends(get_model)):
-    metrics = json.loads(METRICS_PATH.read_text()) if METRICS_PATH.exists() else None
+    # Accuracy describes the installed model; report none when no model is loaded.
+    metrics = json.loads(METRICS_PATH.read_text()) if model is not None and METRICS_PATH.exists() else None
     return {
         "status":          "ok",
+        "data_source":     df.attrs.get("data_source", "private"),
         "model_metrics":   metrics,
         "listings_loaded": len(df),
         "model_loaded":    model is not None,

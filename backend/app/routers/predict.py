@@ -95,7 +95,7 @@ class PredictResponse(BaseModel):
 @router.post("/predict/by-zone", response_model=PredictResponse)
 def predict_by_zone(body: PredictRequest, df=Depends(get_df), model=Depends(get_model)):
     if model is None:
-        raise HTTPException(status_code=503, detail="Model not loaded.")
+        raise HTTPException(status_code=503, detail="Estimates unavailable: no trained model is installed.")
 
     features = body.model_dump(exclude_none=True)
 

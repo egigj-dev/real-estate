@@ -6,13 +6,16 @@ No Overpass calls or PIP computation happen at runtime.
 """
 
 import json
+import logging
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
-from app.config import DATA_PATH, MODEL_PATH
+from app.config import DATA_PATH, MODEL_PATH, DEMO_PATH, USE_DEMO_DATA
+
+logger = logging.getLogger(__name__)
 
 _COL_MAP = {
     "price_eur": "price", "area_sqm": "sqm",
@@ -51,6 +54,23 @@ def _load_and_clean(path: Path) -> pd.DataFrame:
 
     df = pd.DataFrame(raw).rename(columns=_COL_MAP)
 
+    # Unknown values stay unknown; never synthesize held-out estimates.
+    defaults = dict(beds=0, baths=0, floor=0, latitude=float("nan"),
+                    longitude=float("nan"), neighborhood_cluster=0,
+                    dist_to_nearest_center=0, distance_from_center=0,
+                    balconies=0, living_rooms=0, furnishing_status="unknown",
+                    address=None, description="", city="", property_type="unknown",
+                    property_status="unknown")
+    defaults.update({f"has_{name}": False for name in
+                     ("elevator", "parking_space", "carport", "garage", "garden", "terrace")})
+    for col, value in defaults.items():
+        if col not in df:
+            df[col] = value
+    if "price_per_sqm" not in df:
+        df["price_per_sqm"] = df["price"] / df["sqm"].replace(0, float("nan"))
+    if "total_rooms" not in df:
+        df["total_rooms"] = df["beds"] + df["baths"] + df["living_rooms"]
+
     for col in ("price","sqm","beds","baths","floor",
                 "latitude","longitude",
                 "neighborhood_cluster","dist_to_nearest_center",
@@ -80,15 +100,19 @@ def _load_and_clean(path: Path) -> pd.DataFrame:
         print(f"[loader] area_name: {df['area_name'].nunique()} unique areas "
               f"({missing} filled from neighborhood)")
 
+    df["address"] = df["address"].astype(object).where(df["address"].notna(), None)
     df["id"] = df.index.astype(str)
     return df
 
 
 @lru_cache(maxsize=1)
 def get_df() -> pd.DataFrame:
-    if not DATA_PATH.exists():
-        raise FileNotFoundError(f"Dataset not found: {DATA_PATH.resolve()}")
-    df = _load_and_clean(DATA_PATH)
+    is_demo = USE_DEMO_DATA or not DATA_PATH.exists()
+    path = DEMO_PATH if is_demo else DATA_PATH
+    df = _load_and_clean(path)
+    df.attrs["data_source"] = "demo" if is_demo else "private"
+    if is_demo:
+        logger.warning("SYNTHETIC DEMO DATA in use: %s (%s fictional listings)", path, len(df))
     n_zones = df["neighborhood"].nunique()
     n_areas = df["area_name"].nunique()
     print(f"[loader] {len(df):,} listings · {n_zones} ML zones · {n_areas} OSM areas")
@@ -97,7 +121,7 @@ def get_df() -> pd.DataFrame:
 
 @lru_cache(maxsize=1)
 def get_model() -> Any | None:
-    if not MODEL_PATH.exists():
+    if not MODEL_PATH.is_file():
         print(f"[loader] WARNING: model not found at {MODEL_PATH}")
         return None
     import joblib

@@ -16,9 +16,10 @@ function AppInner() {
   const [selId, setSelId] = useState(null)
   const [exploreSeed, setExploreSeed] = useState({ areaName: '', query: '' })
   const [listingsCount, setListingsCount] = useState(null)
+  const [health, setHealth] = useState(null)
 
   useEffect(() => {
-    fetchHealth().then(h => setListingsCount(h.listings_loaded)).catch(() => {})
+    fetchHealth().then(h => { setHealth(h); setListingsCount(h.listings_loaded) }).catch(() => {})
   }, [])
 
   // Generic nav handler used by the sidebar and every page.
@@ -37,6 +38,7 @@ function AppInner() {
 
   return (
     <AppShell page={page} onNavigate={navigate} onSearch={handleTopbarSearch} listingsCount={listingsCount}>
+      {health?.data_source === "demo" && <p role="status">Të dhëna demo sintetike: prona fiktive, jo oferta reale.</p>}
       {page === 'overview' && <OverviewPage onNavigate={navigate} />}
 
       {page === 'explore' && (

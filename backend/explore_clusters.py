@@ -1,6 +1,6 @@
 """
 explore_clusters.py
-===================
+-------------------
 Diagnostic script — compares clustering strategies without touching your
 production model.  Run BEFORE re-training:
 

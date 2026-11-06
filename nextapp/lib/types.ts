@@ -146,6 +146,7 @@ export interface ModelMetrics {
 }
 
 export interface HealthResponse {
+  data_source: "demo" | "private"
   model_metrics: {
     listing: ModelMetrics
     property: ModelMetrics

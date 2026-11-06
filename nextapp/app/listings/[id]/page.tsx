@@ -8,7 +8,7 @@ import {
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { fetchListing, fetchEstimate, fetchComps, formatPrice, listingLabel } from "@/lib/api"
+import { fetchHealth, fetchListing, fetchEstimate, fetchComps, formatPrice, listingLabel } from "@/lib/api"
 import type { ListingDetail, EstimateResponse, CompItem } from "@/lib/types"
 
 const LocationMap = dynamic(() => import("@/components/LocationMap"), { ssr: false })
@@ -81,18 +81,22 @@ function PriceBar({ actual, low, high, estimated }: { actual: number; low: numbe
 export default function DetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
+  const [isDemo, setIsDemo] = useState(false)
+  useEffect(() => { fetchHealth().then(h => setIsDemo(h.data_source === "demo")).catch(() => {}) }, [])
   const [item, setItem] = useState<ListingDetail | null>(null)
   const [estimate, setEstimate] = useState<EstimateResponse | null>(null)
   const [comps, setComps] = useState<CompItem[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const [estimateMessage, setEstimateMessage] = useState<string | null>(null)
   useEffect(() => {
     if (!id) return
+    setEstimateMessage(null)
     setLoading(true); setError(null); setItem(null); setEstimate(null); setComps(null)
     Promise.all([
       fetchListing(id),
-      fetchEstimate(id).catch(() => null),
+      fetchEstimate(id).catch(e => { setEstimateMessage(e.message); return null }),
       fetchComps(id).catch(() => null),
     ])
       .then(([listing, est, cmps]) => { setItem(listing); setEstimate(est); setComps(cmps?.comps ?? null) })
@@ -106,6 +110,7 @@ export default function DetailPage() {
         <ArrowLeft className="h-4 w-4" /> Kthehu te listat
       </button>
 
+      {isDemo && <p role="status">Të dhëna demo sintetike: prona fiktive, jo oferta reale.</p>}
       {loading && <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Duke ngarkuar…</p>}
       {error && <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">Nuk mund të ngarkohet prona {id}. {error}</div>}
 
@@ -170,6 +175,7 @@ export default function DetailPage() {
             </Card>
           )}
 
+          {estimateMessage && <p role="status">Vlerësimi nuk është i disponueshëm. {estimateMessage}</p>}
           {estimate && (
             <Card className="mb-5">
               <CardContent className="p-6">

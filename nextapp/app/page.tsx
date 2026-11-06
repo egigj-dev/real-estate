@@ -154,6 +154,9 @@ export default function OverviewPage() {
   return (
     <>
       <PageHeader title="Përmbledhje" />
+      {health && !health.model_loaded && <p role="status">Vlerësimi nuk është i disponueshëm: nuk është instaluar model i trajnuar.</p>}
+      {health?.data_source === "demo" && <p role="status">Të dhëna demo sintetike: prona fiktive, jo oferta reale.</p>}
+
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[360px_1fr]">
         <Card className="flex flex-col gap-5 p-7">

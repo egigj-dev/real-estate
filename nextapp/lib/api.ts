@@ -8,7 +8,10 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:800
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`)
-  if (!res.ok) throw new Error(`HTTP ${res.status} on ${path}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || `HTTP ${res.status} on ${path}`)
+  }
   return res.json() as Promise<T>
 }
 
@@ -18,7 +21,10 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error(`HTTP ${res.status} on ${path}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || `HTTP ${res.status} on ${path}`)
+  }
   return res.json() as Promise<T>
 }
 

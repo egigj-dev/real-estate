@@ -91,7 +91,7 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 def _distance_label(km: float | None) -> str:
-    if km is None:   return "Nearby"
+    if km is None or not math.isfinite(km): return "Distance unavailable"
     if km < 1:       return "< 1 km"
     if km < 3:       return "1-3 km"
     if km < 7:       return "3-7 km"
@@ -234,7 +234,7 @@ def get_comps(listing_id: Any, df: pd.DataFrame, n: int = 5) -> list[dict]:
     dists      = np.linalg.norm(norm - target_vec, axis=1)
     dists[df.index.get_loc(idx)] = np.inf   # exclude self
 
-    nearest = np.argsort(dists)[:n]
+    nearest = np.argsort(dists)[:min(n, max(0, len(df) - 1))]
     has_coords = {"latitude", "longitude"}.issubset(df.columns)
 
     comps = []

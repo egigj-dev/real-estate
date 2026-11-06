@@ -375,12 +375,14 @@ export default function DetailPage({ id, onBack, onSelect }) {
   const [loading,  setLoad]     = useState(true)
   const [error,    setError]    = useState(null)
 
+  const [estimateMessage, setEstimateMessage] = useState(null)
   useEffect(() => {
     if (!id) return
+    setEstimateMessage(null)
     setLoad(true); setError(null); setItem(null); setEstimate(null); setComps(null)
     Promise.all([
       fetchListing(id),
-      fetchEstimate(id).catch(() => null),
+      fetchEstimate(id).catch(e => { setEstimateMessage(e.message); return null }),
       fetchComps(id).catch(() => null),
     ])
     .then(([listing, est, cmps]) => {
@@ -465,6 +467,7 @@ export default function DetailPage({ id, onBack, onSelect }) {
           )}
 
           {/* ML Estimate */}
+          {estimateMessage && <p role="status">Vlerësimi nuk është i disponueshëm. {estimateMessage}</p>}
           {estimate && (
             <Card className="detail-panel mb-4">
               <Card.Body className="p-4">

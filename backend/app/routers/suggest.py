@@ -96,7 +96,7 @@ def _resolve_cluster(area_name: str | None, df: pd.DataFrame) -> int | None:
 @router.post("/suggest")
 def suggest(body: SuggestRequest, df=Depends(get_df), model=Depends(get_model)):
     if model is None:
-        raise HTTPException(status_code=503, detail="Model not loaded.")
+        raise HTTPException(status_code=503, detail="Estimates unavailable: no trained model is installed.")
 
     cluster_id = _resolve_cluster(body.neighborhood, df)
 

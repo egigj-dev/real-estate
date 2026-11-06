@@ -1,4 +1,4 @@
-export const API_BASE = 'http://localhost:8000'
+export const API_BASE = import.meta.env?.VITE_API_BASE || 'http://127.0.0.1:8000'
 
 export function formatPrice(value) {
   if (value === null || value === undefined) return 'N/A'
@@ -45,25 +45,37 @@ export async function fetchListings({
   if (has_garden)        url.searchParams.set('has_garden',        'true')
   if (furnished !== '')  url.searchParams.set('furnished', furnished)
   const res = await fetch(url.toString())
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || `HTTP ${res.status}`)
+  }
   return res.json()
 }
 
 export async function fetchListing(id) {
   const res = await fetch(`${API_BASE}/listings/${encodeURIComponent(id)}`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || `HTTP ${res.status}`)
+  }
   return res.json()
 }
 
 export async function fetchEstimate(id) {
   const res = await fetch(`${API_BASE}/listings/${encodeURIComponent(id)}/estimate`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || `HTTP ${res.status}`)
+  }
   return res.json()
 }
 
 export async function fetchComps(id) {
   const res = await fetch(`${API_BASE}/listings/${encodeURIComponent(id)}/comps`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || `HTTP ${res.status}`)
+  }
   return res.json()
 }
 
@@ -71,7 +83,10 @@ export async function fetchSuggestions(features) {
   const res = await fetch(`${API_BASE}/suggest`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(features),
   })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || `HTTP ${res.status}`)
+  }
   return res.json()
 }
 
@@ -79,7 +94,10 @@ export async function fetchPredictByZone(features) {
   const res = await fetch(`${API_BASE}/predict/by-zone`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(features),
   })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || `HTTP ${res.status}`)
+  }
   return res.json()
 }
 
@@ -87,7 +105,10 @@ export async function fetchChatParse(text) {
   const res = await fetch(`${API_BASE}/chat/parse`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }),
   })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || `HTTP ${res.status}`)
+  }
   return res.json()
 }
 
@@ -96,25 +117,37 @@ export async function fetchChatParse(text) {
 
 export async function fetchHealth() {
   const res = await fetch(`${API_BASE}/health`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || `HTTP ${res.status}`)
+  }
   return res.json()
 }
 
 export async function fetchFilterOptions() {
   const res = await fetch(`${API_BASE}/filters/options`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || `HTTP ${res.status}`)
+  }
   return res.json()
 }
 
 export async function fetchAreas() {
   const res = await fetch(`${API_BASE}/areas`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || `HTTP ${res.status}`)
+  }
   return res.json()
 }
 
 export async function fetchMarketInsights() {
   const res = await fetch(`${API_BASE}/market/insights`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.detail || `HTTP ${res.status}`)
+  }
   return res.json()
 }
 

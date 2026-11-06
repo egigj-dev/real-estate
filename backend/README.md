@@ -137,3 +137,18 @@ Each listing's error was measured with a model that never saw it: grouped 5-fold
 - **Property model:** Predict, Find and zone prices, from the features a user can enter.
 
 These are asking prices, so the models estimate asking prices, not sale prices. The cleaner drops listings it treats as outliers using statistics over all listings, so these figures describe listings that pass it.
+
+
+## Run from a fresh clone
+
+Start the API with `cd backend && uvicorn main:app --reload --port 8000` after
+installing `backend/requirements.txt`. No private data or trained artefacts are required.
+If `backend/data/final_data.json` is missing, or `USE_DEMO_DATA=1`, the loader
+uses the bundled synthetic, fictional `backend/demo/listings.json` and logs a
+warning. `/health` reports `data_source: "demo"`; both frontends display a notice.
+Listings, filters, areas, comparable listings and market insights remain available.
+Without a trained model, estimate, predict-by-zone and suggest return HTTP 503
+with a JSON `detail` explanation. Demo listings have no held-out estimates, so
+their estimates remain unavailable even with a model installed. No demo training
+is needed. Start the Vite UI with `cd frontend && npm install && npm run dev`,
+or the Next.js UI with `cd nextapp && npm install && npm run dev`.
