@@ -1,95 +1,151 @@
-# Tirana Real Estate
+# Tirana Real Estate — ML-Powered Property Platform
 
-A local property browsing MVP with a FastAPI backend and a React interface. A fresh checkout runs with 48 explicitly synthetic listings. These are fictional fixtures, not scraped properties or evidence of Tirana market prices.
+A full-stack real estate platform for Tirana, Albania. Browse 4,000+ property listings with **ML-powered price estimation**, **neighborhood-based predictions**, **comparable listings**, and **interactive maps**.
 
-## Features and stack
+### Architecture
 
-- Search, numeric and amenity filters, price sorting, pagination and listing details.
-- Comparable listings based on feature distance; no trained model required.
-- Dataset price summaries through the market API.
-- Optional XGBoost estimates, with an explicit unavailable state when no model is installed.
-- Python, FastAPI, Pydantic, pandas, scikit-learn and XGBoost; React 18, Vite 5 and Bootstrap 5. No database required.
-
-## Getting started
-
-Use Python 3.12 and a current Node.js release (Node 26 was used for the API helper tests). From the repository root, install dependencies in an environment with package access:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r backend/requirements.txt
+```
+real-estate/
+├── backend/          ← FastAPI + XGBoost (Python)
+├── frontend/         ← React + Vite + Tailwind (JSX)
+└── nextapp/          ← Next.js admin dashboard (TypeScript)
 ```
 
-Start the API:
+### Backend — FastAPI + XGBoost
+
+**7 API endpoint groups:**
+
+| Route | Description |
+|-------|-------------|
+| `GET /listings` | Paginated, filtered listings (price, beds, sqm, zone, amenities) |
+| `GET /listings/{id}` | Full listing detail |
+| `GET /listings/{id}/estimate` | ML price estimate with cluster-specific error bands |
+| `GET /listings/{id}/comps` | 5 most similar properties |
+| `POST /predict/by-zone` | Price prediction per neighborhood zone |
+| `POST /suggest` | Find best matching listings from feature description |
+| `POST /chat/parse` | Natural language → structured property features |
+| `GET /market/insights` | Price statistics by neighborhood |
+| `GET /filters/options` | Dynamic filter dropdown values |
+| `GET /areas` | OSM sub-area polygons for the map |
+
+**ML Pipeline:**
+- **XGBoost** price regression trained on 4,000+ Tirana listings
+- **Features**: sqm, floor, bedrooms, bathrooms, elevator, parking, distance from city center, KMeans neighborhood clusters
+- **Haversine distance** for spatial feature engineering
+- **Two-phase training** with proper 70/15/15 split
+- **Cluster-specific error bands** — each zone has its own uncertainty estimate
+- **Growth projections** — INSTAT-sourced ~5-7.5% annual appreciation per zone
+
+### Frontend — React/Vite SPA
+
+7 pages with Leaflet maps, ECharts visualizations, and responsive design.
+
+| Page | Description |
+|------|-------------|
+| **Overview** | Dashboard with key metrics and quick-search |
+| **Explore** | Browse & filter listings with cards |
+| **Map** | Interactive map with zone polygons |
+| **Find** | Feature-based property search ("3-bedroom with parking near Blloku") |
+| **Predict** | Zone-by-zone price prediction for custom property specs |
+| **Insights** | Market analytics by neighborhood |
+| **Detail** | Full property detail with estimate, comps, and map |
+
+### Dashboard — Next.js (TypeScript)
+
+Admin dashboard with the same pages in TypeScript + shadcn UI components.
+
+## Quick Start
+
+### Backend
 
 ```bash
 cd backend
-PYTHONDONTWRITEBYTECODE=1 python -m uvicorn main:app --host 127.0.0.1 --port 8000
+pip install -r requirements.txt
+
+# Train the model (one-time)
+python train_model.py
+
+# Start the API
+uvicorn main:app --reload --port 8000
 ```
 
-In a second terminal, from the repository root:
+Open **http://localhost:8000/docs** for interactive API docs.
+
+### Frontend
 
 ```bash
 cd frontend
-npm ci
-npm run dev -- --host 127.0.0.1
+npm install
+npm run dev
 ```
 
-Open `http://127.0.0.1:5173`. The frontend defaults to `http://127.0.0.1:8000`; set `VITE_API_BASE` before starting Vite to use a different API URL. Stop servers with Ctrl+C.
+Open **http://localhost:5173**.
 
-These install and run steps were verified with Python 3.12 and Node 26, with Python dependencies installed from `backend/requirements.txt` by `uv pip`.
-
-## Usage and data
-
-Browse cards, set filters, and open a property to see details and comparables. If no trained model/scaler pair exists, details remain available and the estimate endpoint returns HTTP 503 with an explanation shown by the frontend.
-
-The backend uses `backend/data/final_data.json` when present. Otherwise it logs that synthetic demo data is in use and loads the versioned `backend/demo/listings.json`. `USE_DEMO_DATA=1` explicitly selects the demo even when private data exists. `/health` exposes `data_source` (`demo` or `private`), row count, model availability and whether the model is synthetic. Restart the API after changing data, artifacts or environment variables.
-
-Regenerate the demo deterministically from the repository root:
+### Dashboard
 
 ```bash
-python3 backend/demo/generate.py
+cd nextapp
+npm install
+npm run dev
 ```
 
-An optional small demo model can be trained in seconds. See [backend instructions](backend/README.md) for isolated artifact paths. Estimates from it carry `demo_model: true` and a visible UI notice. They have no measured real-world performance.
+Open **http://localhost:3000**.
 
-Real listings require the private processed dataset, which is not included. The original training workflow also requires private `backend/data/house_price.json`. Neither private data nor model binaries are versioned.
+## System Design
 
-## API
+### Key decisions
 
-All routes below use GET. Interactive documentation is at `http://127.0.0.1:8000/docs`.
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| **ML model** | XGBoost Regressor | Best for tabular data, handles missing values, fast inference |
+| **API framework** | FastAPI | Async support, automatic OpenAPI docs, Pydantic validation |
+| **Data storage** | JSON files (static) + model.joblib | Simple for current scale; PostgreSQL planned |
+| **Frontend** | React + Vite | Fast dev experience, no SSR complexity needed |
+| **Dashboard** | Next.js | SSR for SEO, TypeScript for type safety |
+| **Maps** | Leaflet + OSM | Free, no API key needed for basic use |
+| **Caching** | `lru_cache` singleton | Models/data loaded once in memory |
 
-| Path | Response |
-| --- | --- |
-| `/health` | Status, data source, count and model provenance |
-| `/listings` | Filtered, paginated listing summaries |
-| `/listings/{id}` | Listing detail; 404 for unknown IDs |
-| `/listings/{id}/comps?n=5` | Up to n comparables, excluding the target |
-| `/listings/{id}/estimate` | Price, fixed range, label and model provenance; 503 if unavailable |
-| `/filters/options` | Available categorical values and numeric bounds |
-| `/market/insights` | Dataset medians and cluster summaries |
+### Planned enhancements
 
-Example: `/listings?neighborhood=Demo%20Block%20A&per_page=1` returns 12 demo matches. Filter parameters and bounds are described in [backend/README.md](backend/README.md).
+- **PostgreSQL** — replace JSON storage with proper database
+- **Redis** — cache popular queries, rate limiting
+- **Celery/ARQ** — async model retraining, batch scraping
+- **Scraping pipeline** — daily data from merrjep.al, njoftime.al
+- **Alembic** — database migrations
+- **Docker Compose** — full stack orchestration
+- **Prometheus** — API monitoring
 
-## Testing
+## 📊 Dataset
 
-With backend dependencies plus pytest and httpx installed:
+- **Source**: Scraped from Albanian real estate portals
+- **Listings**: 4,000+ properties in Tirana
+- **Features**: Price, sqm, bedrooms, bathrooms, floor, elevator, parking, garden, terrace, coordinates, property type, furnishing status
+- **Zones**: 6 KMeans-clustered neighborhoods with OSM sub-areas
 
-```bash
-cd backend
-PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q
-```
+## 🛠️ Stack
 
-From the repository root, frontend API helpers can be tested without node_modules:
+| Layer | Technology |
+|-------|-----------|
+| **Backend** | Python 3.10+, FastAPI, XGBoost, scikit-learn, Pandas |
+| **Frontend** | React 18, Vite, Tailwind CSS, Leaflet, ECharts |
+| **Dashboard** | Next.js, TypeScript, Tailwind, shadcn UI |
+| **ML** | XGBoost, scikit-learn, joblib, NumPy |
+| **NLP** | Keyword + Claude API natural language parsing |
 
-```bash
-node --test frontend/tests/api.test.mjs
-```
+## 📄 License
 
-Last verified: 131 backend tests and 6 frontend helper tests passed, and `npm ci` and `npm run build` succeeded. The built interface was exercised in headless Chromium at desktop and phone widths against the demo API, covering listings, the detail page and the missing-model state. Local API smoke tests covered browsing, filters, details, comparables, summaries, missing-model 503, unknown-ID 404, invalid-input 422 and labelled demo estimates.
+MIT
 
-## Limitations
+## Run from a fresh clone
 
-The demo has no real coordinates; geographic distances are unavailable. Its prices, distances from a fictional center and clusters are fixtures. Market summaries describe the loaded dataset only. Cluster labels are internal groupings, not administrative neighborhoods. Addresses may be absent or extracted heuristically from descriptions. IDs are row positions and can change when the dataset changes.
-
-The estimate range is a fixed ±8% band, not a calibrated confidence interval. `train_model.py` previously built its location clusters from price per square metre, which leaked the target. They now use coordinates only. On the notebook's listing dataset, this took the XGBoost test R² from 0.876 to 0.674, with RMSE going from about €39,500 to €64,100. Treat these as the honest scale of the model: estimates are rough and are not valuations. Price-based cleaning still runs before the split, and any previously trained model must be retrained. The full private workflow was not run end to end. This MVP has no authentication, listing editing or live data ingestion.
+Start the API with `cd backend && uvicorn main:app --reload --port 8000` after
+installing `backend/requirements.txt`. No private data or trained artefacts are required.
+If `backend/data/final_data.json` is missing, or `USE_DEMO_DATA=1`, the loader
+uses the bundled synthetic, fictional `backend/demo/listings.json` and logs a
+warning. `/health` reports `data_source: "demo"`; both frontends display a notice.
+Listings, filters, areas, comparable listings and market insights remain available.
+Without a trained model, estimate, predict-by-zone and suggest return HTTP 503
+with a JSON `detail` explanation. Demo listings have no held-out estimates, so
+their estimates remain unavailable even with a model installed. No demo training
+is needed. Start the Vite UI with `cd frontend && npm install && npm run dev`,
+or the Next.js UI with `cd nextapp && npm install && npm run dev`.

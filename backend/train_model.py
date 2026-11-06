@@ -1,48 +1,35 @@
-"""
-train_model.py
-"""
-
-import argparse
+"""Two log-price/m² models evaluated exclusively by grouped cross-fitting."""
+import json
 import sys
-import warnings
-from math import radians, sin, cos, sqrt, atan2
+import re
+from datetime import datetime, timezone
 from pathlib import Path
+from math import radians, sin, cos, sqrt, atan2
 
 import joblib
 import numpy as np
 import pandas as pd
-from scipy.spatial.distance import cdist
 from sklearn.cluster import KMeans
-from sklearn.compose import ColumnTransformer
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import Ridge
+from sklearn.metrics import mean_absolute_error, r2_score
+from sklearn.model_selection import GroupKFold, KFold, train_test_split
 from xgboost import XGBRegressor
+from threadpoolctl import threadpool_limits
 
-warnings.filterwarnings("ignore")
+BASE_DIR = Path(__file__).resolve().parent
+DATA_PATH = BASE_DIR / "data/house_price.json"
+MODEL_DIR = BASE_DIR / "model"
+TIRANA_LAT, TIRANA_LNG = 41.3275, 19.8187
+N_CLUSTERS = 6
+COUNTS = ["bedrooms", "bathrooms", "living_rooms", "balconies"]
+FURNISHING = ["fully_furnished", "partially_furnished", "unfurnished"]
+FEATURE_COLS = ["area_sqm", "floor", *COUNTS, "has_elevator", "has_parking_space",
+                "has_terrace", "has_garden", "has_garage", "has_carport",
+                *["furn_" + x for x in FURNISHING], "distance_from_center",
+                "total_rooms", "lat", "lng", "zone", "zone_km"]
+METHOD = "grouped 5-fold cross-fitting; duplicates and identical descriptions share a group"
 
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
-BASE_DIR    = Path(__file__).resolve().parent
-DATA_PATH   = BASE_DIR / "data" / "house_price.json"
-MODEL_DIR   = BASE_DIR / "model"
-MODEL_PATH  = MODEL_DIR / "model.joblib"
-SCALER_PATH = MODEL_DIR / "scaler.joblib"
-
-# ---------------------------------------------------------------------------
-# Feature columns  — MUST match ml.py FEATURE_COLS
-# ---------------------------------------------------------------------------
-FEATURE_COLS = [
-    "area_sqm", "floor", "bedrooms", "bathrooms",
-    "has_elevator", "has_parking_space",
-    "distance_from_center", "total_rooms",
-    "neighborhood_cluster", "dist_to_nearest_center",
-]
-
-# ---------------------------------------------------------------------------
-# Column rename map  (raw JSON → clean names)
-# ---------------------------------------------------------------------------
 RENAME = {
     "main_property_description_text_content_original_text": "description",
     "main_property_floor":                                  "floor",
@@ -54,7 +41,6 @@ RENAME = {
     "main_property_has_parking_space":                      "has_parking_space",
     "main_property_has_terrace":                            "has_terrace",
     "main_property_location_city_zone_city_city_name":      "city",
-    "main_property_location_city_zone_formatted_address":   "address",
     "main_property_price_currency":                         "price_currency",
     "main_property_property_composition_balconies":         "balconies",
     "main_property_property_composition_bathrooms":         "bathrooms",
@@ -70,7 +56,7 @@ RENAME = {
 }
 
 KEEP_COLS = [
-    "description", "address", "price_eur", "area_sqm", "floor",
+    "description", "price_eur", "area_sqm", "floor",
     "bedrooms", "bathrooms", "balconies", "living_rooms",
     "furnishing_status", "has_elevator", "has_parking_space",
     "has_garage", "has_carport", "has_terrace", "has_garden",
@@ -78,252 +64,264 @@ KEEP_COLS = [
     "lat", "lng",
 ]
 
-TIRANA_LAT = 41.3275
-TIRANA_LNG = 19.8187
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 def haversine_km(lat1, lon1, lat2, lon2):
     lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
-    dlat, dlon = lat2 - lat1, lon2 - lon1
-    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
-    return 6371 * 2 * atan2(sqrt(a), sqrt(1 - a))
+    a = sin((lat2-lat1)/2)**2 + cos(lat1)*cos(lat2)*sin((lon2-lon1)/2)**2
+    return 6371 * 2 * atan2(sqrt(a), sqrt(max(0, 1-a)))
 
 
-# ---------------------------------------------------------------------------
-# Step 1 — Load & rename
-# ---------------------------------------------------------------------------
-def load_raw(path: Path) -> pd.DataFrame:
-    print(f"Loading {path} ...")
+def clean_description(value):
+    """Remove entire numeric expressions, including decimal/thousands separators."""
+    return re.sub(r"\d+(?:[.,]\d+)*", " ", "" if pd.isna(value) else str(value).lower())
+
+
+def normalized_description(value):
+    return re.sub(r"[\W_]+", " ", clean_description(value), flags=re.UNICODE).strip()
+
+
+def duplicate_groups(df):
+    """Union both duplicate keys transitively; IDs follow input order, not prices."""
+    parent = list(range(len(df)))
+    def root(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+    seen = {}
+    for i, (_, row) in enumerate(df.iterrows()):
+        exact = tuple(round(float(row[c]), d) if pd.notna(row[c]) else None
+                      for c, d in [("price_eur", 0), ("area_sqm", 1), ("lat", 4), ("lng", 4), ("floor", 16)])
+        keys = [("exact", exact)]
+        text = normalized_description(row.get("description", ""))
+        if len(text) >= 40:
+            keys.append(("text", text))
+        for key in keys:
+            if key in seen:
+                parent[root(i)] = root(seen[key])
+            else:
+                seen[key] = i
+    return pd.Series(pd.factorize([root(i) for i in range(len(df))])[0], index=df.index)
+
+
+def cross_folds(df, groups=None):
+    groups = duplicate_groups(df) if groups is None else groups
+    return list(GroupKFold(5).split(df, groups=groups))
+
+def _auto_zone_names(n: int) -> dict:
+    templates = {
+        3: ["Periferia", "Zona e Mesme", "Qendra & Blloku"],
+        4: ["Periferia", "Zonë Periferike", "Zona e Mesme", "Qendra & Blloku"],
+        5: ["Periferia", "Zonë Periferike", "Zona e Mesme", "Zonë Qendrore", "Qendra & Blloku"],
+        6: ["Periferia A", "Periferia B", "Zona e Mesme A", "Zona e Mesme B", "Qendra A", "Qendra & Blloku"],
+    }
+    names = templates.get(n, [f"Zonë {i}" for i in range(n)])
+    return {i: names[i] for i in range(n)}
+
+
+
+def load_raw(path=DATA_PATH):
     df = pd.read_json(path).rename(columns=RENAME)
-    df = df.drop_duplicates()
-    keep = [c for c in KEEP_COLS if c in df.columns]
-    df = df[keep].copy()
-    df = df.loc[:, ~df.columns.duplicated()]  # remove duplicate cols
-    print(f"  Raw rows: {len(df):,}  |  columns: {df.shape[1]}")
-    return df
+    return df.loc[:, ~df.columns.duplicated()][KEEP_COLS].copy()
 
 
-# ---------------------------------------------------------------------------
-# Step 2 — DataCleaner chain  (exact notebook calls)
-# ---------------------------------------------------------------------------
-def clean(df: pd.DataFrame) -> pd.DataFrame:
-    print("\nCleaning ...")
+def clean(df):
+    """Apply the project's DataCleaner: label fixes, validity filters, duplicate and outlier removal.
+
+    The outlier rule uses statistics over all listings. It decides which listings
+    count as valid data, so the reported metrics describe listings that pass it.
+    """
     sys.path.insert(0, str(BASE_DIR))
     from data_cleaner import DataCleaner
 
-    description_col = df["description"].copy()
+    df = df.copy()
+    description = df["description"].copy()
     df["description"] = df["description"].astype(str)
+    out = (DataCleaner(df)
+           .standardize_formats()
+           .handle_missing()
+           .check_impossible_values()
+           .filter_location()
+           .extract_areas()
+           .extract_prices()
+           .remove_duplicates()
+           .remove_outliers(method="delete")
+           .validate_ranges()
+           .finalize())
+    # The cleaner keeps the original index, so descriptions realign by label.
+    out["description"] = description.loc[out.index]
+    return out.reset_index(drop=True)
 
-    cleaner = DataCleaner(df)
-    df = (cleaner
-          .standardize_formats()
-          .handle_missing()
-          .check_impossible_values()
-          .filter_location()
-          .extract_areas()
-          .extract_prices()
-          .remove_duplicates()
-          .remove_outliers(method="delete")
-          .validate_ranges()
-          .finalize())
 
-    df["description"] = description_col
-    print(f"  Clean rows: {len(df):,}")
+def base_features(rows):
+    df = rows.copy()
+    for col in FEATURE_COLS:
+        if col not in df:
+            df[col] = np.nan
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    df["total_rooms"] = df[COUNTS].fillna(0).clip(lower=0).sum(axis=1)
+    df["distance_from_center"] = [haversine_km(TIRANA_LAT, TIRANA_LNG, a, b)
+                                  for a, b in zip(df.lat, df.lng)]
+    furn = rows.get("furnishing_status", pd.Series("unknown", index=rows.index))
+    for value in FURNISHING:
+        df["furn_" + value] = (furn == value).astype(float)
     return df
 
 
-# ---------------------------------------------------------------------------
-# Step 3 — Feature engineering
-# ---------------------------------------------------------------------------
-def feature_engineer(df: pd.DataFrame) -> pd.DataFrame:
-    print("\nFeature engineering ...")
+class TextModel:
+    def fit(self, rows, y):
+        self.vectorizer = TfidfVectorizer(ngram_range=(1, 2), min_df=3,
+                                        max_features=30000, sublinear_tf=True)
+        self.mean = float(np.mean(y))
+        self.ridge = None
+        try:
+            x = self.vectorizer.fit_transform(rows.get("description", pd.Series("", index=rows.index)).map(clean_description))
+        except ValueError as exc:
+            if not any(t in str(exc) for t in ["empty vocabulary", "no terms remain", "After pruning", "max_df corresponds"]):
+                raise
+            return self
+        self.ridge = Ridge(alpha=3, solver="lsqr").fit(x, y)
+        return self
 
-    # total_rooms
-    room_cols = [c for c in ["bedrooms", "bathrooms", "living_rooms", "kitchens", "balconies"]
-                 if c in df.columns]
-    df["total_rooms"] = df[room_cols].sum(axis=1)
-
-    # KMeans on coordinates only: price must stay out of every model input, or scores are inflated by target leakage.
-    coords = df[["lat", "lng"]].values
-    features = (coords - coords.min(axis=0)) / (coords.max(axis=0) - coords.min(axis=0) + 1e-9)
-
-    kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
-    df["neighborhood_cluster"] = kmeans.fit_predict(features)
-
-    centers = kmeans.cluster_centers_
-    distances = cdist(features, centers, metric="euclidean")
-    df["dist_to_nearest_center"] = distances.min(axis=1)
-
-    # distance_from_center (Haversine to Tirana center)
-    df["distance_from_center"] = df.apply(
-        lambda r: haversine_km(TIRANA_LAT, TIRANA_LNG, r["lat"], r["lng"])
-        if pd.notna(r["lat"]) and pd.notna(r["lng"]) else np.nan,
-        axis=1,
-    )
-
-    print(f"  Clusters: {df['neighborhood_cluster'].value_counts().to_dict()}")
-    print(f"  Distance from center - mean: {df['distance_from_center'].mean():.2f} km")
-    return df
+    def predict(self, rows):
+        if self.ridge is None:
+            return np.full(len(rows), self.mean)
+        text = rows.get("description", pd.Series("", index=rows.index)).map(clean_description)
+        return self.ridge.predict(self.vectorizer.transform(text))
 
 
-# ---------------------------------------------------------------------------
-# Step 4 — Encode  (matches notebook ColumnTransformer exactly)
-# ---------------------------------------------------------------------------
-def encode(df: pd.DataFrame) -> pd.DataFrame:
-    print("\nEncoding ...")
+class Pipeline:
+    def features(self, rows):
+        df = base_features(rows)
+        raw = self.kmeans.predict(df[["lat", "lng"]])
+        df["zone"] = [self.mapping[int(z)] for z in raw]
+        df["zone_km"] = [haversine_km(a, b, *self.kmeans.cluster_centers_[z])
+                         for a, b, z in zip(df.lat, df.lng, raw)]
+        return df[FEATURE_COLS].fillna(self.medians).astype(float)
 
-    numerical = [
-        "area_sqm", "floor", "bedrooms", "bathrooms", "balconies", "living_rooms",
-        "has_elevator", "has_parking_space", "has_garage", "has_carport",
-        "has_terrace", "has_garden",
-        "lat", "lng", "distance_from_center", "dist_to_nearest_center",
-        "neighborhood_cluster", "total_rooms",
-    ]
-    categorical = ["furnishing_status", "property_type", "property_status"]
+    def predict(self, rows, kind="property"):
+        x = self.features(rows)
+        if kind == "listing":
+            x["text_prediction"] = self.text.predict(rows)
+        return np.exp(self.models[kind].predict(x)).astype(float) * rows.area_sqm.to_numpy()
 
-    numerical   = [c for c in numerical   if c in df.columns]
-    categorical = [c for c in categorical if c in df.columns]
-
-    preprocessor = ColumnTransformer(
-        transformers=[
-            ("num", "passthrough", numerical),
-            ("cat", OneHotEncoder(sparse_output=False, handle_unknown="ignore", drop="first"), categorical),
-        ],
-        remainder="drop",
-    )
-
-    X_full    = preprocessor.fit_transform(df)
-    cat_names = list(preprocessor.named_transformers_["cat"].get_feature_names_out(categorical))
-    all_features = numerical + cat_names
-
-    df_encoded = pd.DataFrame(X_full, columns=all_features, index=df.index)
-    print(f"  Encoded shape: {df_encoded.shape}")
-    return df_encoded
+    @property
+    def feature_importances_(self):
+        return self.models["property"].feature_importances_
 
 
-# ---------------------------------------------------------------------------
-# Step 5 — Scale + split
-# ---------------------------------------------------------------------------
-def scale_and_split(df_encoded: pd.DataFrame, y: pd.Series):
-    print("\nScaling ...")
-
-    feature_cols = [c for c in FEATURE_COLS if c in df_encoded.columns]
-    X = df_encoded[feature_cols].copy()
-
-    mask = ~(X.isnull().any(axis=1) | y.isnull())
-    X, y = X[mask], y[mask]
-
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    print(f"  Train: {len(X_train):,}  |  Test: {len(X_test):,}")
-
-    scaler = StandardScaler()
-    X_train_s = pd.DataFrame(scaler.fit_transform(X_train), columns=feature_cols, index=X_train.index)
-    X_test_s  = pd.DataFrame(scaler.transform(X_test),      columns=feature_cols, index=X_test.index)
-
-    return X_train_s, X_test_s, y_train, y_test, scaler
-
-
-# ---------------------------------------------------------------------------
-# Step 6 — Train XGBoost (tuned params from notebook Cell 37/38)
-# ---------------------------------------------------------------------------
-def train(X_train, X_test, y_train, y_test):
-    print("\nTraining XGBoost ...")
-
-    X_tr, X_val, y_tr, y_val = train_test_split(
-        X_train, y_train, test_size=0.1, random_state=42
-    )
-
-    model = XGBRegressor(
-        subsample=0.8,
-        reg_lambda=2.0,
-        reg_alpha=0.1,
-        n_estimators=2000,
-        max_depth=7,
-        learning_rate=0.01,
-        colsample_bytree=0.7,
-        tree_method="hist",   # swap to device="cuda" if GPU available
-        random_state=42,
-        verbosity=0,
-        early_stopping_rounds=50,
-    )
-
-    model.fit(
-        X_tr, np.log1p(y_tr),
-        eval_set=[(X_val, np.log1p(y_val))],
-        verbose=100,
-    )
-
-    print(f"  Best iteration: {model.best_iteration}")
-
-    y_pred = np.expm1(model.predict(X_test))
-    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-    mae  = mean_absolute_error(y_test, y_pred)
-    r2   = r2_score(y_test, y_pred)
-
-    print(f"\n  Test RMSE : EUR {rmse:,.0f}")
-    print(f"  Test MAE  : EUR {mae:,.0f}")
-    print(f"  Test R2   : {r2:.4f}")
-    return model
+@threadpool_limits.wrap(limits=4)
+def fit_pipeline(train_rows, **overrides):
+    """Fit every learned component using these rows only, including inner text OOF."""
+    rows = train_rows.reset_index(drop=True)
+    result = Pipeline()
+    result.kmeans = KMeans(n_clusters=6, random_state=42, n_init=10).fit(rows[["lat", "lng"]])
+    raw = result.kmeans.labels_
+    y = np.log(rows.price_eur.to_numpy() / rows.area_sqm.to_numpy())
+    ranked = pd.Series(np.exp(y)).groupby(raw).median().sort_values().index
+    result.mapping = {int(old): rank for rank, old in enumerate(ranked)}
+    result.medians = base_features(rows)[FEATURE_COLS].median().fillna(0)
+    x = result.features(rows)
+    groups = rows["_group"] if "_group" in rows else duplicate_groups(rows)
+    count = min(5, groups.nunique())
+    splits = (GroupKFold(count).split(rows, groups=groups) if count >= 2
+              else KFold(min(5, len(rows)), shuffle=True, random_state=42).split(rows))
+    text_oof = np.empty(len(rows))
+    for a, b in splits:
+        text_oof[b] = TextModel().fit(rows.iloc[a], y[a]).predict(rows.iloc[b])
+    result.text = TextModel().fit(rows, y)
+    params = dict(learning_rate=0.05, n_estimators=1500, early_stopping_rounds=60,
+                  max_depth=5, min_child_weight=3, subsample=0.8, colsample_bytree=0.7,
+                  reg_lambda=2, reg_alpha=0.1, random_state=42, tree_method="hist", n_jobs=4)
+    params.update(overrides)
+    a, b = train_test_split(np.arange(len(rows)), test_size=0.1, random_state=42)
+    result.models = {}
+    for kind in ["property", "listing"]:
+        features = x.copy()
+        if kind == "listing":
+            features["text_prediction"] = text_oof
+        result.models[kind] = XGBRegressor(**params).fit(
+            features.iloc[a], y[a], eval_set=[(features.iloc[b], y[b])], verbose=False)
+    result.zone_cfg = {"n_clusters": 6, "centers": result.kmeans.cluster_centers_[ranked].tolist(),
+                       "price_sorted_mapping": result.mapping, "zone_names": _auto_zone_names(6), "cluster_stats": {}}
+    for z in range(6):
+        subset = rows.loc[x.zone == z]
+        result.zone_cfg["cluster_stats"][z] = dict(count=len(subset), mean_price=float(subset.price_eur.mean()),
+            median_price=float(subset.price_eur.median()), mean_ppsqm=float((subset.price_eur/subset.area_sqm).mean()),
+            median_ppsqm=float((subset.price_eur/subset.area_sqm).median()), mean_lat=float(subset.lat.mean()),
+            mean_lng=float(subset.lng.mean()), mean_dist_center=float(x.loc[x.zone == z, "distance_from_center"].mean()))
+    return result
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-def train_demo():
-    from app.config import DEMO_PATH, MODEL_PATH as output_path, SCALER_PATH as scaler_path
-    from app.data.loader import _load_and_clean
-    from ml import _build_feature_matrix
+def cross_fit(rows, **overrides):
+    """Return predictions, fold-local zone IDs and fold IDs without a full-data fit."""
+    rows = rows.reset_index(drop=True).copy()
+    rows["_group"] = duplicate_groups(rows)
+    predictions = {kind: np.empty(len(rows)) for kind in ["property", "listing"]}
+    zones, folds = np.empty(len(rows), dtype=int), np.empty(len(rows), dtype=int)
+    for fold, (a, b) in enumerate(cross_folds(rows, rows._group)):
+        print(f"Cross-fitting fold {fold + 1}/5", flush=True)
+        pipeline = fit_pipeline(rows.iloc[a], **overrides)
+        for kind in predictions:
+            predictions[kind][b] = pipeline.predict(rows.iloc[b], kind)
+        zones[b] = pipeline.features(rows.iloc[b]).zone
+        folds[b] = fold
+    return predictions, zones, folds
 
-    df = _load_and_clean(DEMO_PATH)
-    features = _build_feature_matrix(df)
-    scaler = StandardScaler().fit(features)
-    model = XGBRegressor(n_estimators=40, max_depth=3, random_state=42, n_jobs=1)
-    model.fit(scaler.transform(features), np.log1p(df["price"]))
-    model.demo_model_ = True
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    scaler_path.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(model, output_path)
-    joblib.dump(scaler, scaler_path)
-    print(f"SYNTHETIC DEMO MODEL saved to {output_path}; scaler: {scaler_path}")
-    print("For UI demonstration only. No real market performance is measured.")
+
+def metrics(actual, predicted):
+    error = np.abs(predicted - actual) / actual
+    return dict(mae_eur=float(mean_absolute_error(actual, predicted)), median_ape_pct=float(np.median(error)*100),
+                mape_pct=float(error.mean()*100), r2=float(r2_score(actual, predicted)),
+                share_within_10_pct=float((error <= .1).mean()), share_within_20_pct=float((error <= .2).mean()), n=len(actual))
+
+
+def error_bands(actual, predicted, zones):
+    error = np.abs(predicted - actual) / actual
+    def band(values):
+        return {f"p{p}_rel_error": float(np.percentile(values, p)) for p in [50, 75, 90]}
+    return {"global": band(error), **{int(z): band(error[zones == z]) for z in np.unique(zones)}}
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Train on private raw data or synthetic demo fixtures.")
-    parser.add_argument("--demo", action="store_true", help="Train a small, explicitly labelled synthetic demo model")
-    args = parser.parse_args()
-    if args.demo:
-        train_demo()
-        return
-    if not DATA_PATH.exists():
-        print(f"ERROR: {DATA_PATH} not found.")
-        print("Place house_price.json in backend/data/ and re-run.")
-        sys.exit(1)
-
-    df     = load_raw(DATA_PATH)
-    df     = clean(df)
-    df     = feature_engineer(df)
-    df_enc = encode(df)
-    y      = df["price_eur"].copy()
-
-    X_train, X_test, y_train, y_test, scaler = scale_and_split(df_enc, y)
-    model = train(X_train, X_test, y_train, y_test)
-
-    # Save model + scaler
-    MODEL_DIR.mkdir(parents=True, exist_ok=True)
-    joblib.dump(model,  MODEL_PATH)
-    joblib.dump(scaler, SCALER_PATH)
-    print(f"\nSaved -> {MODEL_PATH}")
-    print(f"Saved -> {SCALER_PATH}")
-
-    # Save the processed dataset for the API (final_data.json)
-    final_path = BASE_DIR / "data" / "final_data.json"
-    df.to_json(final_path, orient="records")
-    print(f"Saved -> {final_path}")
+    rows = clean(load_raw())
+    predictions, zones, folds = cross_fit(rows)
+    actual = rows.price_eur.to_numpy()
+    report = {kind: metrics(actual, value) for kind, value in predictions.items()}
+    report.update(method=METHOD, group_count=int(duplicate_groups(rows).nunique()), training_date=datetime.now(timezone.utc).isoformat())
+    bands = {kind: error_bands(actual, value, zones) for kind, value in predictions.items()}
+    print("Fitting serving pipeline", flush=True)
+    pipeline = fit_pipeline(rows)
+    MODEL_DIR.mkdir(exist_ok=True)
+    joblib.dump(pipeline, MODEL_DIR / "model.joblib")
+    joblib.dump(pipeline.zone_cfg, MODEL_DIR / "zone_config.joblib")
+    joblib.dump(bands, MODEL_DIR / "price_bands.joblib")
+    (MODEL_DIR / "scaler.joblib").unlink(missing_ok=True)
+    (MODEL_DIR / "metrics.json").write_text(json.dumps(report, indent=2) + "\n")
+    x = pipeline.features(rows)
+    rows["neighborhood_cluster"] = x.zone.astype(int)
+    rows["dist_to_nearest_center"] = x.zone_km
+    rows["distance_from_center"] = x.distance_from_center
+    rows["total_rooms"] = x.total_rooms
+    rows["price_per_sqm"] = rows.price_eur / rows.area_sqm
+    rows["neighborhood"] = rows.neighborhood_cluster.map(pipeline.zone_cfg["zone_names"])
+    rows["estimate_eur"] = predictions["listing"]
+    rows["estimate_fold"] = folds
+    rows["estimate_zone"] = zones  # Bands use the held-out fold's price-ranked zone.
+    # Preserve existing offline area annotations by the row's stable raw attributes.
+    final = BASE_DIR / "data/final_data.json"
+    if final.exists():
+        old = pd.read_json(final)
+        if "area_name" in old:
+            keys = ["price_eur", "area_sqm", "lat", "lng", "floor"]
+            areas = old.drop_duplicates(keys).set_index(keys).area_name
+            rows["area_name"] = pd.MultiIndex.from_frame(rows[keys]).map(areas)
+    rows.to_json(final, orient="records")
+    print(json.dumps(report, indent=2))
 
 
 if __name__ == "__main__":
-    main()
+    # Persist importable class names even when invoked as a script.
+    from train_model import main as train_main
+    train_main()

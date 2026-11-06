@@ -18,34 +18,35 @@ class ListingSummary(BaseModel):
     price:                float
     sqm:                  float
     beds:                 int
-    baths:                Optional[float]
-    floor:                Optional[float]
+    baths:                Optional[float] = None
+    floor:                Optional[float] = None
     furnished:            bool
-    furnishing_status:    Optional[str]
+    furnishing_status:    Optional[str] = None
     address:              Optional[str] = None
-    neighborhood:         Optional[str]
-    neighborhood_cluster: Optional[float]
-    property_type:        Optional[str]
-    latitude:             Optional[float]
-    longitude:            Optional[float]
-    price_per_sqm:        Optional[float]
-    total_rooms:          Optional[float]
+    neighborhood:         Optional[str] = None
+    neighborhood_cluster: Optional[float] = None
+    area_name:            Optional[str] = None
+    property_type:        Optional[str] = None
+    latitude:             Optional[float] = None
+    longitude:            Optional[float] = None
+    price_per_sqm:        Optional[float] = None
+    total_rooms:          Optional[float] = None
 
 
 class ListingDetail(ListingSummary):
-    description:           Optional[str]
-    property_status:       Optional[str]
-    has_elevator:          Optional[bool]
-    has_parking_space:     Optional[bool]
-    has_carport:           Optional[bool]
-    has_garage:            Optional[bool]
-    has_garden:            Optional[bool]
-    has_terrace:           Optional[bool]
-    balconies:             Optional[float]
-    living_rooms:          Optional[float]
-    city:                  Optional[str]
-    dist_to_nearest_center: Optional[float]
-    distance_from_center:  Optional[float]
+    description:           Optional[str] = None
+    property_status:       Optional[str] = None
+    has_elevator:          Optional[bool] = None
+    has_parking_space:     Optional[bool] = None
+    has_carport:           Optional[bool] = None
+    has_garage:            Optional[bool] = None
+    has_garden:            Optional[bool] = None
+    has_terrace:           Optional[bool] = None
+    balconies:             Optional[float] = None
+    living_rooms:          Optional[float] = None
+    city:                  Optional[str] = None
+    dist_to_nearest_center: Optional[float] = None
+    distance_from_center:  Optional[float] = None
 
 
 # ---------------------------------------------------------------------------
@@ -66,11 +67,12 @@ class PaginatedListings(BaseModel):
 
 class EstimateResponse(BaseModel):
     listing_id:      str
-    demo_model:      bool = False
     estimated_price: float
     range_low:       float
     range_high:      float
-    label:           str          # "Fair" | "Overpriced" | "Underpriced"
+    label:           str           # "Fair" | "Overpriced" | "Underpriced"
+    band_pct:        Optional[float] = None   # % band width used (cluster-specific)
+    threshold_pct:   Optional[float] = None   # % threshold used (cluster-specific)
 
 
 # ---------------------------------------------------------------------------
@@ -110,8 +112,44 @@ class MarketInsights(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Filter options  (for dynamic dropdowns)
+# Suggest by features
 # ---------------------------------------------------------------------------
+
+class SuggestRequest(BaseModel):
+    sqm:               Optional[float] = None
+    floor:             Optional[float] = None
+    beds:              Optional[int]   = None
+    baths:             Optional[float] = None
+    has_elevator:      Optional[bool]  = None
+    has_parking_space: Optional[bool]  = None
+    neighborhood:      Optional[str]   = None   # zone name e.g. "Qendra & Blloku"
+    n:                 int             = 10
+
+
+class SuggestionItem(BaseModel):
+    id:            str
+    price:         float
+    sqm:           float
+    beds:          int
+    baths:         float
+    floor:         Optional[float]  = None
+    address:       Optional[str]    = None
+    neighborhood:  Optional[str]    = None
+    property_type: Optional[str]    = None
+    latitude:      Optional[float]  = None
+    longitude:     Optional[float]  = None
+    price_per_sqm: Optional[float]  = None
+    furnished:     bool
+    match_score:   float
+    rank:          int
+
+
+class SuggestResponse(BaseModel):
+    estimated_price: float
+    range_low:       float
+    range_high:      float
+    band_pct:        float
+    suggestions:     list[SuggestionItem]
 
 class RangeOption(BaseModel):
     min: float
@@ -123,6 +161,7 @@ class IntRangeOption(BaseModel):
 
 class FilterOptions(BaseModel):
     neighborhoods:    list[str]
+    area_names:       list[str]
     property_types:   list[str]
     furnished_options: list[str]
     price_range:      RangeOption

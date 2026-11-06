@@ -23,6 +23,7 @@ backend/data/*.csv
 # OS
 .DS_Store
 Thumbs.db
+*:Zone.Identifier
 
 # Editor
 .idea/

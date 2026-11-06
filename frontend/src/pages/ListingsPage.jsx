@@ -1,92 +1,104 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Container, Row, Col, Card, Form, Button } from 'react-bootstrap'
-import Hero from '../components/Hero'
-import FeatureBadges from '../components/FeatureBadges'
+import {
+  SlidersHorizontal, RotateCcw, Search, Map as MapIcon, LayoutGrid, List,
+  X, ArrowUpDown, Trees, SquareParking, AlertTriangle, SearchX,
+  ChevronLeft, ChevronRight,
+} from 'lucide-react'
+import PageHeader from '../components/layout/PageHeader'
 import ListingCard from '../components/ListingCard'
 import SearchableList from '../components/SearchableList'
+import MapView from '../components/MapView'
+import { Card, CardContent } from '../components/ui/card'
+import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
+import { Label } from '../components/ui/label'
+import { Badge } from '../components/ui/badge'
+import { Slider } from '../components/ui/slider'
+import {
+  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+} from '../components/ui/select'
 import { fetchListings } from '../api'
 
-// ─── Default filter state — names match backend params exactly ────────────────
+const ALL = '__all__' // Radix Select forbids empty-string item values; sentinel for "no filter"
+
 const DEFAULT_FILTERS = {
-  q:                '',
-  per_page:         20,
-  min_sqm:          30,
-  max_sqm:          500,
-  min_beds:         '',
-  min_price:        '',
-  max_price:        '',
-  min_baths:        '',
-  has_elevator:     false,
-  has_garden:       false,
-  has_parking_space: false,
-  furnished:        '',      // '' | 'true' | 'false'
-  sort:             '',      // '' | 'price_asc' | 'price_desc'
+  q: '', per_page: 20, min_sqm: 30, max_sqm: 500,
+  min_beds: '', min_price: '', max_price: '', min_baths: '',
+  has_elevator: false, has_garden: false, has_parking_space: false,
+  furnished: '', area_name: '', neighborhood: '', sort: '',
 }
 
-// ─── Small reusable toggle checkbox ───────────────────────────────────────────
-function FancyCheck({ id, label, checked, onChange, icon }) {
-  return (
-    <label htmlFor={id} className={`fancy-check ${checked ? 'active' : ''}`}>
-      <input
-        id={id} type="checkbox" checked={checked}
-        onChange={e => onChange(e.target.checked)}
-        style={{ display: 'none' }}
-      />
-      <span>{icon}</span> {label}
-    </label>
-  )
-}
+const AMENITIES = [
+  { key: 'has_elevator',      icon: ArrowUpDown,    label: 'Ashensor' },
+  { key: 'has_garden',        icon: Trees,          label: 'Kopsht' },
+  { key: 'has_parking_space', icon: SquareParking,  label: 'Parking' },
+]
 
-// ─── Active filter summary chips ──────────────────────────────────────────────
-function ActiveFilters({ filters, onClear }) {
-  const chips = []
-  if (filters.min_sqm !== 30 || filters.max_sqm !== 500)
-    chips.push(`${filters.min_sqm}–${filters.max_sqm} m²`)
-  if (filters.min_beds)   chips.push(`${filters.min_beds}+ dhoma`)
-  if (filters.min_baths)  chips.push(`${filters.min_baths}+ banjo`)
-  if (filters.min_price)  chips.push(`nga ${Number(filters.min_price).toLocaleString()} €`)
-  if (filters.max_price)  chips.push(`deri ${Number(filters.max_price).toLocaleString()} €`)
-  if (filters.has_elevator)      chips.push('Ashensor')
-  if (filters.has_garden)        chips.push('Kopsht')
-  if (filters.has_parking_space) chips.push('Parking')
-  if (filters.furnished === 'true')  chips.push('Mobiluar')
-  if (filters.furnished === 'false') chips.push('Pa mobilim')
-  if (filters.sort === 'price_asc')  chips.push('Çmim ↑')
-  if (filters.sort === 'price_desc') chips.push('Çmim ↓')
-
-  if (!chips.length) return null
+// A labelled filter cell — Label + control, consistent spacing.
+function Field({ label, children }) {
   return (
-    <div className="d-flex flex-wrap gap-2 align-items-center mb-3">
-      <small style={{ color: 'var(--muted)' }}>Filtra aktiv:</small>
-      {chips.map(c => <span key={c} className="active-chip">{c}</span>)}
-      <button className="clear-btn" onClick={onClear}>✕ Pastro</button>
+    <div className="flex flex-col gap-1.5">
+      <Label>{label}</Label>
+      {children}
     </div>
   )
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
-export default function ListingsPage({ onSelect }) {
-  const [filters, setFilters] = useState(DEFAULT_FILTERS)
-  const [draft,   setDraft]   = useState(DEFAULT_FILTERS)
-  const [items,   setItems]   = useState([])
-  const [total,   setTotal]   = useState(0)
-  const [page,    setPage]    = useState(1)
-  const [pages,   setPages]   = useState(1)
-  const [loading, setLoad]    = useState(false)
-  const [error,   setError]   = useState(null)
-  const [tab,     setTab]     = useState('grid')
+function ActiveFilters({ filters, onClear }) {
+  const chips = []
+  if (filters.area_name) chips.push(filters.area_name)
+  if (filters.q) chips.push(`"${filters.q}"`)
+  if (filters.min_sqm !== 30 || filters.max_sqm !== 500) chips.push(`${filters.min_sqm}–${filters.max_sqm} m²`)
+  if (filters.min_beds) chips.push(`${filters.min_beds}+ dhoma`)
+  if (filters.min_baths) chips.push(`${filters.min_baths}+ banjo`)
+  if (filters.min_price) chips.push(`nga ${Number(filters.min_price).toLocaleString()} €`)
+  if (filters.max_price) chips.push(`deri ${Number(filters.max_price).toLocaleString()} €`)
+  if (filters.has_elevator) chips.push('Ashensor')
+  if (filters.has_garden) chips.push('Kopsht')
+  if (filters.has_parking_space) chips.push('Parking')
+  if (filters.furnished === 'true') chips.push('Mobiluar')
+  if (filters.furnished === 'false') chips.push('Pa mobilim')
+  if (filters.sort === 'price_asc') chips.push('Çmim rritës')
+  if (filters.sort === 'price_desc') chips.push('Çmim zbritës')
+  if (!chips.length) return null
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2 font-sans">
+      <span className="text-xs text-muted-foreground">Filtra aktiv:</span>
+      {chips.map(c => <Badge key={c} variant="secondary" className="font-normal">{c}</Badge>)}
+      <Button variant="ghost" size="sm" onClick={onClear} className="h-7 text-muted-foreground">
+        <X /> Pastro
+      </Button>
+    </div>
+  )
+}
 
-  const set = (key, val) => setDraft(d => ({ ...d, [key]: val }))
+export default function ListingsPage({ onSelect, initialAreaName = '', initialQuery = '' }) {
+  const initialFilters = (initialAreaName || initialQuery)
+    ? { ...DEFAULT_FILTERS, area_name: initialAreaName, q: initialQuery }
+    : DEFAULT_FILTERS
+
+  const [filters, setFilters] = useState(initialFilters)
+  const [zones, setZones] = useState([])
+  const [draft, setDraft] = useState(initialFilters)
+  const [items, setItems] = useState([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [pages, setPages] = useState(1)
+  const [loading, setLoad] = useState(false)
+  const [error, setError] = useState(null)
+  const [tab, setTab] = useState('grid')
+  const [showMap, setShowMap] = useState(true)
+
+  const set = (k, v) => setDraft(d => ({ ...d, [k]: v }))
 
   const load = useCallback(async (f, p = 1) => {
     setLoad(true); setError(null)
     try {
       const data = await fetchListings({ ...f, page: p })
-      // Backend returns: { total, page, per_page, pages, listings: [...] }
       setItems(data.listings ?? [])
-      setTotal(data.total   ?? 0)
-      setPages(data.pages   ?? 1)
-      setPage(data.page     ?? 1)
+      setTotal(data.total ?? 0)
+      setPages(data.pages ?? 1)
+      setPage(data.page ?? 1)
     } catch (e) {
       setError(e.message); setItems([]); setTotal(0)
     } finally {
@@ -94,278 +106,238 @@ export default function ListingsPage({ onSelect }) {
     }
   }, [])
 
-  // Initial load
-  useEffect(() => { load(DEFAULT_FILTERS, 1) }, [load])
+  useEffect(() => { load(initialFilters, 1) }, [load])
+  useEffect(() => {
+    fetch(`${import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'}/filters/options`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.area_names?.length) setZones(d.area_names)
+                   else if (d?.neighborhoods) setZones(d.neighborhoods) })
+      .catch(() => {})
+  }, [])
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    setFilters(draft)
-    load(draft, 1)
-  }
-
-  const handleReset = () => {
-    setDraft(DEFAULT_FILTERS)
-    setFilters(DEFAULT_FILTERS)
-    load(DEFAULT_FILTERS, 1)
-  }
-
-  const goPage = (p) => {
-    load(filters, p)
-  }
+  const handleSubmit = (e) => { e.preventDefault(); setFilters(draft); load(draft, 1) }
+  const handleReset = () => { setDraft(DEFAULT_FILTERS); setFilters(DEFAULT_FILTERS); load(DEFAULT_FILTERS, 1) }
+  const goPage = (p) => load(filters, p)
 
   return (
     <>
-      <Hero total={total} />
-      <FeatureBadges />
+      <PageHeader
+        title="Eksploro Pronat"
+        subtitle={total > 0
+          ? `${total.toLocaleString()} prona të gatshme për shfletim`
+          : 'Filtro sipas çmimit, sipërfaqes, dhomave dhe zonës.'}
+      />
 
-      <Container className="pb-5">
-        {/* ── Filter Panel ─────────────────────────────────────────────── */}
-        <Card className="filter-panel mb-4">
-          <Card.Body>
-            <div className="d-flex align-items-center justify-content-between mb-3">
-              <h2 style={{ fontSize: 17, margin: 0 }}>🔍 Filtro Pronat</h2>
-              <button className="clear-btn" onClick={handleReset}>↺ Reset</button>
+      <div className="mx-auto w-full px-0 pb-5 font-sans" style={{ maxWidth: 1400 }}>
+
+        {/* ── FILTER PANEL ── */}
+        <Card className="mb-6">
+          <CardContent className="p-5 sm:p-6">
+
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight text-foreground">
+                <SlidersHorizontal className="size-4 text-muted-foreground" />
+                Filtro Pronat
+              </h2>
+              <Button variant="ghost" size="sm" onClick={handleReset} className="text-muted-foreground">
+                <RotateCcw /> Reset
+              </Button>
             </div>
 
-            <Form onSubmit={handleSubmit}>
-              {/* Row 1 — Search + Sort + per_page */}
-              <Row className="g-2 mb-2">
-                <Col xs={12} md={5}>
-                  <div className="filter-label">Kërko</div>
-                  <Form.Control
-                    className="filter-input" type="text"
-                    value={draft.q}
-                    onChange={e => set('q', e.target.value)}
-                    placeholder="p.sh. penthouse, Blloku, vila…"
-                  />
-                </Col>
-                <Col xs={6} md={4}>
-                  <div className="filter-label">Rendit sipas</div>
-                  <Form.Select
-                    className="filter-input"
-                    value={draft.sort}
-                    onChange={e => set('sort', e.target.value)}
-                  >
-                    <option value="">— Pa renditje —</option>
-                    <option value="price_asc">Çmim: i ulët → i lartë ↑</option>
-                    <option value="price_desc">Çmim: i lartë → i ulët ↓</option>
-                  </Form.Select>
-                </Col>
-                <Col xs={6} md={3}>
-                  <div className="filter-label">Rezultate / faqe</div>
-                  <Form.Select
-                    className="filter-input"
-                    value={draft.per_page}
-                    onChange={e => set('per_page', Number(e.target.value))}
-                  >
-                    {[10, 20, 50, 100].map(n => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </Form.Select>
-                </Col>
-              </Row>
+            <form onSubmit={handleSubmit} className="space-y-5">
 
-              {/* Row 2 — SQM range sliders */}
-              <Row className="g-2 mb-2">
-                <Col xs={12}>
-                  <div className="filter-label">
-                    Sipërfaqja: {draft.min_sqm} m² — {draft.max_sqm} m²
-                  </div>
-                  <div className="d-flex gap-3 align-items-center">
-                    <div style={{ flex: 1 }}>
-                      <small style={{ color: 'var(--muted)', fontSize: 11 }}>Min</small>
-                      <input
-                        type="range" className="range-slider"
-                        min={10} max={500} step={10}
-                        value={draft.min_sqm}
-                        onChange={e => {
-                          const v = Number(e.target.value)
-                          set('min_sqm', v > draft.max_sqm - 10 ? draft.max_sqm - 10 : v)
-                        }}
-                      />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <small style={{ color: 'var(--muted)', fontSize: 11 }}>Max</small>
-                      <input
-                        type="range" className="range-slider"
-                        min={10} max={500} step={10}
-                        value={draft.max_sqm}
-                        onChange={e => {
-                          const v = Number(e.target.value)
-                          set('max_sqm', v < draft.min_sqm + 10 ? draft.min_sqm + 10 : v)
-                        }}
-                      />
-                    </div>
-                    <div className="sqm-display">
-                      <span>{draft.min_sqm}</span>
-                      <span style={{ color: 'var(--muted)' }}>–</span>
-                      <span>{draft.max_sqm} m²</span>
-                    </div>
-                  </div>
-                </Col>
-              </Row>
+              {/* Row 1 */}
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                <Field label="Kërko">
+                  <Input value={draft.q} onChange={e => set('q', e.target.value)} placeholder="rrugë, lagje, lloji…" />
+                </Field>
+                <Field label="Zona">
+                  <Select value={draft.area_name || ALL} onValueChange={v => set('area_name', v === ALL ? '' : v)}>
+                    <SelectTrigger><SelectValue placeholder="Të gjitha zonat" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL}>Të gjitha zonat</SelectItem>
+                      {zones.map(z => <SelectItem key={z} value={z}>{z}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Rendit sipas">
+                  <Select value={draft.sort || ALL} onValueChange={v => set('sort', v === ALL ? '' : v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL}>Pa renditje</SelectItem>
+                      <SelectItem value="price_asc">Çmim rritës</SelectItem>
+                      <SelectItem value="price_desc">Çmim zbritës</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Rezultate / faqe">
+                  <Select value={String(draft.per_page)} onValueChange={v => set('per_page', Number(v))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {[10, 20, 50, 100].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </div>
 
-              {/* Row 3 — Beds / Baths / Price */}
-              <Row className="g-2 mb-2">
-                <Col xs={6} sm={3}>
-                  <div className="filter-label">Min dhoma</div>
-                  <Form.Select className="filter-input" value={draft.min_beds} onChange={e => set('min_beds', e.target.value)}>
-                    <option value="">Të gjitha</option>
-                    {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}+</option>)}
-                  </Form.Select>
-                </Col>
-                <Col xs={6} sm={3}>
-                  <div className="filter-label">Min banjo</div>
-                  <Form.Select className="filter-input" value={draft.min_baths} onChange={e => set('min_baths', e.target.value)}>
-                    <option value="">Të gjitha</option>
-                    {[1,2,3].map(n => <option key={n} value={n}>{n}+</option>)}
-                  </Form.Select>
-                </Col>
-                <Col xs={6} sm={3}>
-                  <div className="filter-label">Çmim min (€)</div>
-                  <Form.Control
-                    className="filter-input" type="number" placeholder="0"
-                    value={draft.min_price} min={0}
-                    onChange={e => set('min_price', e.target.value)}
-                  />
-                </Col>
-                <Col xs={6} sm={3}>
-                  <div className="filter-label">Çmim max (€)</div>
-                  <Form.Control
-                    className="filter-input" type="number" placeholder="∞"
-                    value={draft.max_price} min={0}
-                    onChange={e => set('max_price', e.target.value)}
-                  />
-                </Col>
-              </Row>
+              {/* Row 2 — surface area range */}
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <Label>Sipërfaqja</Label>
+                  <span className="text-xs font-medium text-foreground">{draft.min_sqm} – {draft.max_sqm} m²</span>
+                </div>
+                <Slider
+                  min={10} max={500} step={10}
+                  value={[draft.min_sqm, draft.max_sqm]}
+                  onValueChange={([min, max]) => setDraft(d => ({ ...d, min_sqm: min, max_sqm: max }))}
+                  className="py-1"
+                />
+              </div>
 
-              {/* Row 4 — Amenities + Furnishing */}
-              <Row className="g-2 mb-3">
-                <Col xs={12} md={6}>
-                  <div className="filter-label mb-2">Amenitete</div>
-                  <div className="d-flex flex-wrap gap-2">
-                    <FancyCheck id="el" icon="🛗" label="Ashensor"
-                      checked={draft.has_elevator} onChange={v => set('has_elevator', v)} />
-                    <FancyCheck id="gd" icon="🌿" label="Kopsht"
-                      checked={draft.has_garden} onChange={v => set('has_garden', v)} />
-                    <FancyCheck id="pk" icon="🅿️" label="Parking"
-                      checked={draft.has_parking_space} onChange={v => set('has_parking_space', v)} />
-                  </div>
-                </Col>
-                <Col xs={12} md={6}>
-                  <div className="filter-label mb-2">Statusi i mobilimit</div>
-                  <div className="d-flex flex-wrap gap-2">
-                    {[
-                      { val: '',      label: 'Të gjitha'      },
-                      { val: 'true',  label: '🪑 Mobiluar'    },
-                      { val: 'false', label: '🚫 Pa mobilim'  },
-                    ].map(o => (
-                      <button
-                        key={o.val} type="button"
-                        className={`status-btn ${draft.furnished === o.val ? 'active' : ''}`}
-                        onClick={() => set('furnished', o.val)}
-                      >
-                        {o.label}
-                      </button>
+              {/* Row 3 */}
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                <Field label="Min dhoma">
+                  <Select value={draft.min_beds || ALL} onValueChange={v => set('min_beds', v === ALL ? '' : v)}>
+                    <SelectTrigger><SelectValue placeholder="Të gjitha" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL}>Të gjitha</SelectItem>
+                      {[1, 2, 3, 4, 5].map(n => <SelectItem key={n} value={String(n)}>{n}+</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Min banjo">
+                  <Select value={draft.min_baths || ALL} onValueChange={v => set('min_baths', v === ALL ? '' : v)}>
+                    <SelectTrigger><SelectValue placeholder="Të gjitha" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL}>Të gjitha</SelectItem>
+                      {[1, 2, 3].map(n => <SelectItem key={n} value={String(n)}>{n}+</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Çmim min (€)">
+                  <Input type="number" min={0} placeholder="0" value={draft.min_price}
+                    onChange={e => set('min_price', e.target.value)} />
+                </Field>
+                <Field label="Çmim max (€)">
+                  <Input type="number" min={0} placeholder="—" value={draft.max_price}
+                    onChange={e => set('max_price', e.target.value)} />
+                </Field>
+              </div>
+
+              {/* Row 4 — amenities · furnished · apply */}
+              <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-4">
+                <div className="md:col-span-2 flex flex-col gap-1.5">
+                  <Label>Amenitete</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {AMENITIES.map(({ key, icon: Icon, label }) => (
+                      <Button key={key} type="button" size="sm"
+                        variant={draft[key] ? 'default' : 'outline'}
+                        onClick={() => set(key, !draft[key])}>
+                        <Icon /> {label}
+                      </Button>
                     ))}
                   </div>
-                </Col>
-              </Row>
-
-              {/* Submit */}
-              <Row className="g-2">
-                <Col xs={12} md={4} className="ms-auto">
-                  <Button type="submit" className="btn-search w-100">
-                    ↗ Apliko Filtrat
-                  </Button>
-                </Col>
-              </Row>
-            </Form>
-          </Card.Body>
+                </div>
+                <Field label="Statusi i mobilimit">
+                  <Select value={draft.furnished || ALL} onValueChange={v => set('furnished', v === ALL ? '' : v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL}>Të gjitha</SelectItem>
+                      <SelectItem value="true">Mobiluar</SelectItem>
+                      <SelectItem value="false">Pa mobilim</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Button type="submit" className="w-full">
+                  <Search /> Apliko Filtrat
+                </Button>
+              </div>
+            </form>
+          </CardContent>
         </Card>
 
-        {/* ── Status bar + View toggle ──────────────────────────────────── */}
-        <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
-          <small style={{ color: 'var(--muted)' }}>
+        {/* ── TOOLBAR ── */}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-sm text-muted-foreground">
             {loading
-              ? <><span className="status-dot" /> Duke ngarkuar…</>
+              ? 'Duke ngarkuar…'
               : error
-              ? <span style={{ color: 'var(--danger)' }}>Gabim gjatë ngarkimit</span>
-              : `Duke shfaqur ${items.length} nga ${total} rezultate`
-            }
-          </small>
-          <div className="view-toggle">
-            <button className={tab === 'grid' ? 'active' : ''} onClick={() => setTab('grid')}>
-              ⊞ Grid
-            </button>
-            <button className={tab === 'list' ? 'active' : ''} onClick={() => setTab('list')}>
-              ≡ Listë
-            </button>
+              ? <span className="text-destructive">Gabim</span>
+              : <><strong className="text-foreground">{items.length}</strong> nga <strong className="text-foreground">{total}</strong> rezultate</>}
+          </span>
+
+          <div className="flex items-center gap-2">
+            <Button variant={showMap ? 'default' : 'outline'} size="sm" onClick={() => setShowMap(m => !m)}>
+              <MapIcon /> {showMap ? 'Fshih hartën' : 'Trego hartën'}
+            </Button>
+            <div className="flex overflow-hidden rounded-md border border-input">
+              <Button variant={tab === 'grid' ? 'secondary' : 'ghost'} size="sm" className="rounded-none border-0"
+                onClick={() => setTab('grid')}>
+                <LayoutGrid /> Grid
+              </Button>
+              <Button variant={tab === 'list' ? 'secondary' : 'ghost'} size="sm" className="rounded-none border-0"
+                onClick={() => setTab('list')}>
+                <List /> Listë
+              </Button>
+            </div>
           </div>
         </div>
 
-        {/* ── Active filter chips ───────────────────────────────────────── */}
         <ActiveFilters filters={filters} onClear={handleReset} />
 
-        {/* ── Error ────────────────────────────────────────────────────── */}
         {error && (
-          <div className="err-box mb-3">
-            ⚠️ Nuk mund të ngarkohen listat. A është API aktiv në {' '}
-            <code>http://localhost:8000</code>?
-            <br /><small>{error}</small>
+          <div className="mb-3 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <div>
+              API nuk është aktiv në <code>http://localhost:8000</code>
+              <div className="text-xs opacity-80">{error}</div>
+            </div>
           </div>
         )}
 
-        {/* ── Empty ────────────────────────────────────────────────────── */}
         {!loading && !error && items.length === 0 && (
-          <div className="empty-box">
-            <div style={{ fontSize: 40, marginBottom: 12 }}>🏙️</div>
+          <div className="flex flex-col items-center gap-3 rounded-xl border border-border bg-card py-14 text-center text-muted-foreground">
+            <SearchX className="size-9 opacity-50" />
             <div>Nuk u gjetën rezultate me këto filtra.</div>
-            <button className="clear-btn mt-3" onClick={handleReset}>↺ Pastro filtrat</button>
+            <Button variant="outline" size="sm" onClick={handleReset}><RotateCcw /> Pastro filtrat</Button>
           </div>
         )}
 
-        {/* ── Grid View ─────────────────────────────────────────────────── */}
-        {tab === 'grid' && (
-          <Row xs={1} sm={2} lg={3} className="g-3">
-            {items.map((item, i) => (
-              <Col key={item.id}>
-                <ListingCard item={item} index={i} onClick={() => onSelect(item.id)} />
-              </Col>
-            ))}
-          </Row>
-        )}
+        {/* ── SPLIT LAYOUT ── */}
+        <div className="grid items-start gap-6" style={{ gridTemplateColumns: showMap ? '1fr 400px' : '1fr' }}>
+          <div>
+            {tab === 'grid' && (
+              <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${showMap ? '' : 'lg:grid-cols-3'}`}>
+                {items.map((item, i) => (
+                  <ListingCard key={item.id} item={item} index={i} onClick={() => onSelect(item.id)} />
+                ))}
+              </div>
+            )}
 
-        {/* ── List View ─────────────────────────────────────────────────── */}
-        {tab === 'list' && (
-          <SearchableList items={items} onSelect={onSelect} />
-        )}
+            {tab === 'list' && <SearchableList items={items} onSelect={onSelect} />}
 
-        {/* ── Pagination ────────────────────────────────────────────────── */}
-        {!loading && pages > 1 && (
-          <div className="d-flex justify-content-center align-items-center gap-3 mt-4">
-            <button
-              className="status-btn"
-              disabled={page <= 1}
-              onClick={() => goPage(page - 1)}
-              style={{ opacity: page <= 1 ? 0.4 : 1 }}
-            >
-              ← Para
-            </button>
-            <span style={{ color: 'var(--muted)', fontSize: 14 }}>
-              Faqja {page} nga {pages}
-            </span>
-            <button
-              className="status-btn"
-              disabled={page >= pages}
-              onClick={() => goPage(page + 1)}
-              style={{ opacity: page >= pages ? 0.4 : 1 }}
-            >
-              Pas →
-            </button>
+            {!loading && pages > 1 && (
+              <div className="mt-6 flex items-center justify-center gap-3">
+                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => goPage(page - 1)}>
+                  <ChevronLeft /> Para
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Faqja <strong className="text-foreground">{page}</strong> nga <strong className="text-foreground">{pages}</strong>
+                </span>
+                <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => goPage(page + 1)}>
+                  Pas <ChevronRight />
+                </Button>
+              </div>
+            )}
           </div>
-        )}
-      </Container>
+
+          {showMap && (
+            <div className="sticky" style={{ top: 76 }}>
+              <MapView items={items} onSelect={onSelect} areaName={filters.area_name || null} height={600} />
+            </div>
+          )}
+        </div>
+      </div>
     </>
   )
 }

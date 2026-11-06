@@ -26,8 +26,8 @@ test('an unavailable estimate preserves the API explanation', async (t) => {
   await assert.rejects(fetchEstimate('0'), /Estimates unavailable: no trained model/)
 })
 
-test('a demo estimate preserves its provenance', async (t) => {
-  const body = { listing_id: '0', estimated_price: 100, demo_model: true }
+test('a stored estimate preserves its response', async (t) => {
+  const body = { listing_id: '0', estimated_price: 100, band_pct: 8 }
   t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => body }))
   assert.deepEqual(await fetchEstimate('0'), body)
 })

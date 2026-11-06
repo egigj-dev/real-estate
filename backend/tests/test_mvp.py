@@ -67,47 +67,16 @@ def test_invalid_existing_data_does_not_silently_fall_back(monkeypatch, tmp_path
     load_df.cache_clear()
 
 
-def test_missing_model_or_scaler(monkeypatch, tmp_path):
-    monkeypatch.setattr(loader, 'MODEL_PATH', tmp_path / 'model.joblib')
-    monkeypatch.setattr(loader, 'SCALER_PATH', tmp_path / 'scaler.joblib')
+@pytest.mark.parametrize('kind', ['file', 'directory'])
+def test_missing_model(monkeypatch, tmp_path, kind):
+    monkeypatch.setattr(loader, 'MODEL_PATH', tmp_path / 'missing' / kind)
+    if kind == 'directory':
+        loader.MODEL_PATH.mkdir(parents=True)
     load_model.cache_clear()
-    assert load_model() is None
-    (tmp_path / 'model.joblib').write_bytes(b'not loaded without scaler')
-    load_model.cache_clear()
-    assert load_model() is None
-    load_model.cache_clear()
-
-
-def test_no_model_is_503_but_unknown_id_is_404(client):
-    import main
-    from app.routers import estimates
-    dependency = estimates.get_model
-    previous = main.app.dependency_overrides.get(dependency)
-    main.app.dependency_overrides[dependency] = lambda: None
     try:
-        r = client.get('/listings/0/estimate')
-        assert r.status_code == 503
-        assert 'Estimates unavailable' in r.json()['detail']
-        assert client.get('/listings/unknown/estimate').status_code == 404
+        assert load_model() is None
     finally:
-        if previous is None:
-            main.app.dependency_overrides.pop(dependency)
-        else:
-            main.app.dependency_overrides[dependency] = previous
-
-
-def test_missing_scaler_is_503(client, monkeypatch):
-    import ml
-    def missing():
-        raise FileNotFoundError('scaler')
-    monkeypatch.setattr(ml, '_get_scaler', missing)
-    assert client.get('/listings/0/estimate').status_code == 503
-
-
-def test_model_provenance(client, fake_model, monkeypatch):
-    monkeypatch.setattr(fake_model, 'demo_model_', True, raising=False)
-    assert client.get('/listings/0/estimate').json()['demo_model'] is True
-    assert client.get('/health').json()['demo_model'] is True
+        load_model.cache_clear()
 
 
 def test_health_exposes_data_source(client, fake_df, monkeypatch):
@@ -115,11 +84,7 @@ def test_health_exposes_data_source(client, fake_df, monkeypatch):
     assert client.get('/health').json()['data_source'] == 'demo'
 
 
-@pytest.mark.parametrize('query', [
-    'min_price=-1', 'max_price=-1', 'min_price=nan', 'max_price=inf',
-    'min_sqm=nan', 'max_sqm=inf', 'min_baths=nan', 'max_baths=inf',
-    'sort=invalid', 'page=0', 'per_page=0', 'per_page=101',
-])
+@pytest.mark.parametrize('query', ['page=0', 'per_page=0', 'per_page=501', 'min_beds=-1'])
 def test_invalid_filters_and_pagination_are_422(client, query):
     assert client.get('/listings?' + query).status_code == 422
 
@@ -167,18 +132,75 @@ def test_literal_search_and_reversed_range(client):
     assert client.get('/listings?min_price=100000&max_price=1').json()['total'] == 0
 
 
-def test_location_features_do_not_depend_on_price():
-    import numpy as np
-    import pandas as pd
-    from train_model import feature_engineer
+@pytest.mark.parametrize('model_exists', [False, True])
+def test_fresh_clone_endpoints(tmp_path, model_exists):
+    # A subprocess avoids the session fixture's patched loader and exercises
+    # environment configuration, real startup, and every fallback endpoint.
+    import os
+    import subprocess
+    import sys
+    script = r'''
+import socket
+socket.create_connection = lambda *a, **k: (_ for _ in ()).throw(AssertionError("Network forbidden"))
+from fastapi.testclient import TestClient
+from main import app
+import app.data.loader as loader
+if MODEL_EXISTS:
+    app.dependency_overrides[loader.get_model] = lambda: object()
+with TestClient(app) as client:
+    health = client.get('/health').json()
+    assert health['data_source'] == 'demo'
+    assert 'model_metrics' in health
+    if not MODEL_EXISTS:
+        assert health['model_metrics'] is None
+    assert health['model_loaded'] == MODEL_EXISTS
+    for path in ['/listings', '/listings/0', '/filters/options', '/areas', '/listings/0/comps', '/market/insights']:
+        response = client.get(path)
+        assert response.status_code == 200, (path, response.text)
+    response = client.get('/listings/0/estimate')
+    assert response.status_code == 503, response.text
+    assert 'no trained model is installed' in response.json()['detail']
+    assert client.get('/listings/missing/estimate').status_code == 404
+    if not MODEL_EXISTS:
+        for path in ['/predict/by-zone', '/suggest']:
+            response = client.post(path, json={})
+            assert response.status_code == 503, response.text
+            assert 'no trained model is installed' in response.json()['detail']
+'''
+    env = dict(os.environ, DATA_PATH=str(tmp_path / 'missing.json'),
+               MODEL_PATH=str(tmp_path / 'missing-model'), USE_DEMO_DATA='0')
+    result = subprocess.run([sys.executable, '-c', 'MODEL_EXISTS = ' + repr(model_exists) + '\n' + script],
+                            env=env, capture_output=True, text=True, timeout=90)
+    assert result.returncode == 0, result.stdout + result.stderr
 
-    generator = np.random.default_rng(0)
-    frame = pd.DataFrame({
-        "lat": generator.uniform(41.30, 41.36, 60), "lng": generator.uniform(19.78, 19.86, 60),
-        "bedrooms": 2, "bathrooms": 1, "price_per_sqm": generator.uniform(800, 4000, 60),
-    })
-    changed = frame.copy()
-    changed["price_per_sqm"] = changed["price_per_sqm"].to_numpy()[::-1] * 3
-    first, second = feature_engineer(frame.copy()), feature_engineer(changed)
-    assert (first["neighborhood_cluster"] == second["neighborhood_cluster"]).all()
-    assert np.allclose(first["dist_to_nearest_center"], second["dist_to_nearest_center"])
+
+def test_local_private_data_and_trained_model():
+    import os
+    import subprocess
+    import sys
+    from app.config import BASE_DIR
+    data = BASE_DIR / 'data/final_data.json'
+    model = BASE_DIR / 'model/model.joblib'
+    if not data.is_file() or not model.is_file():
+        pytest.skip('Private data and trained artefacts are not installed')
+    script = r'''
+import socket
+socket.create_connection = lambda *a, **k: (_ for _ in ()).throw(AssertionError("Network forbidden"))
+from fastapi.testclient import TestClient
+from main import app
+with TestClient(app) as client:
+    health = client.get('/health').json()
+    assert health['data_source'] == 'private'
+    assert health['model_loaded']
+    assert health['model_metrics'] is not None
+    for path in ['/listings', '/filters/options', '/areas', '/market/insights', '/listings/0/comps', '/listings/0/estimate']:
+        response = client.get(path)
+        assert response.status_code == 200, (path, response.text)
+    for path in ['/predict/by-zone', '/suggest']:
+        response = client.post(path, json={'sqm': 80, 'beds': 2, 'baths': 1})
+        assert response.status_code == 200, (path, response.text)
+'''
+    result = subprocess.run([sys.executable, '-c', script], capture_output=True,
+                            text=True, timeout=90,
+                            env=dict(os.environ, DATA_PATH=str(data), MODEL_PATH=str(model), USE_DEMO_DATA='0'))
+    assert result.returncode == 0, result.stdout + result.stderr

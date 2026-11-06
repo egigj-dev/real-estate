@@ -1,82 +1,154 @@
-# Backend
+# Backend — FastAPI + XGBoost
 
-FastAPI serves listings, comparable properties, dataset summaries and optional XGBoost estimates. pandas loads a single JSON dataset into memory; data and model loaders cache their results until restart.
+REST API for the Tirana Real Estate platform with ML-powered price estimation.
 
-## Setup and run
+## Stack
 
-From the repository root:
+- **FastAPI** — REST framework with automatic OpenAPI docs
+- **XGBoost** — Price prediction model
+- **scikit-learn** — StandardScaler, KMeans clustering
+- **Pandas** — Data handling and feature engineering
+- **Pydantic** — Request/response validation
+- **HTTPX** — Claude API integration for NL parsing
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r backend/requirements.txt
-cd backend
-PYTHONDONTWRITEBYTECODE=1 python -m uvicorn main:app --host 127.0.0.1 --port 8000
+## Structure
+
+```
+backend/
+├── main.py                  Entry point
+├── ml.py                    ML utilities (estimate, comps, suggest, price-by-zone)
+├── train_model.py           Model training pipeline
+├── data_cleaner.py          Data cleaning chain
+├── extractors.py            Feature extraction helpers
+├── assign_areas.py          OSM area assignment script
+├── debug_zones.py           Zone debugging utility
+├── explore_clusters.py      Cluster exploration
+├── patch_filter.py          Filter patching
+├── app/
+│   ├── config.py            Paths, CORS, constants
+│   ├── data/
+│   │   ├── loader.py        DataFrame + model singleton (lru_cache)
+│   │   └── areas.py         OSM sub-area polygons
+│   ├── routers/
+│   │   ├── listings.py      CRUD + search + OSM areas
+│   │   ├── estimates.py     ML price estimate per listing
+│   │   ├── comps.py         Comparable listings
+│   │   ├── market.py        Market insights by neighborhood
+│   │   ├── predict.py       Zone-based price prediction
+│   │   ├── suggest.py       Feature-based property suggestions
+│   │   └── chat.py          Natural language → features
+│   ├── schemas/             Pydantic models
+│   └── services/            Business logic (no HTTP)
+├── data/
+│   ├── house_price.json     Raw scraped data
+│   └── final_data.json      Cleaned + processed data
+├── model/
+│   ├── model.joblib         Trained XGBoost
+│   ├── scaler.joblib        StandardScaler
+│   ├── price_bands.joblib   Per-cluster error bands
+│   └── zone_config.joblib   Zone names config
+└── tests/
+    ├── conftest.py
+    ├── test_listings.py
+    ├── test_market.py
+    ├── test_ml.py
+    └── test_services.py
 ```
 
-The run command was smoke-tested using preinstalled dependencies. Installation could not be verified offline because the supplied interpreter has no pip. No training is required to browse the demo. Open `/docs` for the interactive API schema and `/health` for loaded data/model status.
-
-## Data and configuration
-
-| Environment variable | Default / meaning |
-| --- | --- |
-| `DATA_PATH` | `backend/data/final_data.json`; processed private JSON |
-| `USE_DEMO_DATA` | `1`, `true` or `yes` forces synthetic demo data |
-| `MODEL_PATH` | `backend/model/model.joblib` |
-| `SCALER_PATH` | `scaler.joblib` beside `MODEL_PATH` |
-| `CORS_ORIGINS` | Comma-separated allowed browser origins; includes localhost and 127.0.0.1 on port 5173 |
-
-Paths above are resolved relative to the backend source directory by default; explicit relative overrides are relative to the launch directory. A missing configured dataset falls back to `demo/listings.json`. An existing malformed dataset is not silently replaced. Demo use emits a warning and `/health` returns `data_source: "demo"`. An existing configured dataset is reported as `private`; this describes the selection path, not verified provenance of arbitrary user-supplied files.
-
-`demo/generate.py` deterministically generates 48 fictional rows. Generic addresses, descriptions, prices and engineered features are synthetic. Coordinates are intentionally absent. Generate from the repository root with `python3 backend/demo/generate.py`.
-
-Processed records use `price_eur`, `area_sqm`, `bedrooms`, `bathrooms`, `furnishing_status`, `description`, `neighborhood_cluster` and the optional detail/feature fields illustrated by the demo JSON. The loader renames numeric fields for API responses, derives furnishing flags and cluster labels, preserves supplied addresses, and otherwise attempts address extraction from descriptions. An unresolved address is `null`.
-
-## Optional demo model
-
-From `backend/`, with dependencies installed:
+## Setup
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 MODEL_PATH=/tmp/real-estate-demo-model/model.joblib python train_model.py --demo
-USE_DEMO_DATA=1 MODEL_PATH=/tmp/real-estate-demo-model/model.joblib python -m uvicorn main:app --host 127.0.0.1 --port 8000
+# Create virtualenv
+python -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Train the model (one-time, before first run)
+python train_model.py
+
+# Start the API
+uvicorn main:app --reload --port 8000
 ```
 
-These commands were run in offline verification. The small XGBoost model trains on all demo rows for interface demonstration only. Training prints no performance metrics, does not modify private data, and tags the artifact so `/health` and estimates return `demo_model: true`. The frontend labels these estimates as synthetic. The separate path above avoids replacing private artifacts. Restart the API to load newly generated files.
+## API Endpoints
 
-A model and its matching scaler are both required. If either is absent, `/listings/{id}/estimate` returns 503. An unknown listing returns 404 even without a model.
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | API + model status |
+| GET | `/listings` | Paginated, filtered listings |
+| GET | `/listings/{id}` | Single listing detail |
+| GET | `/listings/{id}/estimate` | ML price estimate with fair/overpriced/underpriced label |
+| GET | `/listings/{id}/comps` | 5 comparable listings |
+| POST | `/predict/by-zone` | Per-zone price prediction for custom features |
+| POST | `/suggest` | Find best matching listings from feature description |
+| POST | `/chat/parse` | Natural language → structured features |
+| GET | `/market/insights` | Price stats by neighborhood |
+| GET | `/filters/options` | Available filter dropdown values |
+| GET | `/areas` | OSM sub-area polygons for map |
 
-## Private training workflow
+Interactive docs at **http://127.0.0.1:8000/docs**
 
-`python train_model.py` retains the original workflow: read `data/house_price.json`, clean and engineer features, train XGBoost, then write `data/final_data.json`, `model/model.joblib` and `model/scaler.joblib`. It requires the private raw dataset and was not verified here. This original mode uses its fixed paths; the artifact environment overrides apply to demo training and API loading.
+## ML Model
 
-The private pipeline prints evaluation statistics when run. No model metrics are asserted here. Location clusters use coordinates only, so that price is not a model input, and earlier models trained with price-derived clusters must be retrained. Do not present estimates as market valuations.
+### Training pipeline
 
-## API usage
+```
+Raw JSON → Clean → Feature engineer → Encode → Scale → XGBoost train
+```
 
-All endpoints use GET:
+**Key features:**
+- `area_sqm`, `floor`, `bedrooms`, `bathrooms`, `has_elevator`, `has_parking_space`
+- `distance_from_center` (Haversine to Tirana center)
+- `neighborhood_cluster` (KMeans on lat/lng + price_per_sqm)
+- `dist_to_nearest_center`, `total_rooms`
 
-| Path | Behavior |
-| --- | --- |
-| `/health` | Status, listing count, `data_source`, `model_loaded`, `demo_model` |
-| `/listings` | Summaries in `{total, page, per_page, pages, listings}` |
-| `/listings/{id}` | Detail or 404 |
-| `/listings/{id}/estimate` | Estimate, fixed ±8% band, comparison label, `demo_model`; unavailable model returns 503 |
-| `/listings/{id}/comps` | Feature-nearest candidates; optional `n`, default 5, valid range 1–100 |
-| `/filters/options` | Dropdown choices and numeric ranges |
-| `/market/insights` | Dataset medians and cluster averages/counts |
+**Training:**
+- XGBoost with tuned params: `max_depth=7`, `subsample=0.8`, `learning_rate=0.01`
+- Targets log-transformed prices: `np.log1p(price_eur)`
+- Early stopping at 50 rounds
 
-Listing filters: literal text `q`; `min_`/`max_` pairs for `price`, `sqm`, `beds`, `baths`; booleans `furnished`, `has_elevator`, `has_parking_space`, `has_garden`; `property_type`; `neighborhood` (cluster label or address/description substring). Numeric bounds must be finite and nonnegative; bed bounds are integers. `sort` accepts `price_asc` or `price_desc`.
+### Inference
 
-`page` starts at 1; `per_page` defaults to 20 and accepts 1–100. Invalid parameters return 422. Reversed numeric ranges and unmatched filters return empty results. Pages past the end return an empty list. Comparables never include the target and may contain fewer than n rows.
+```
+Features → StandardScaler → XGBoost predict → np.expm1 → EUR price
+```
 
-## Testing and limits
+Each cluster has its own error bands (p75 relative error) for fair range estimation.
+Labels: **Fair** / **Overpriced** / **Underpriced** based on cluster-specific threshold.
 
-Install pytest and httpx in addition to runtime requirements. From `backend/`:
+## Run Tests
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q
+pytest -v
 ```
 
-Offline result: 131 passed. Existing tests and fixtures were retained unchanged. Added regressions cover optional addresses, deterministic generation, data source selection, missing artifacts, model provenance, feature names, input bounds and unknown IDs. Upstream deprecation warnings and feature-name warnings from the existing synthetic scaler fixture remain.
+## Model evaluation
 
-Demo browsing, filters, details, comparables and summaries work without private files or training. Data summaries and demo predictions are not real market evidence. The fixed estimate band is not a confidence interval; comparable rankings are feature distances, not appraisals. Missing coordinates yield `Distance unavailable`. Data is loaded into memory, IDs follow row order, and changes require restart.
+Each listing's error was measured with a model that never saw it: grouped 5-fold cross-fitting over the 4,148 cleaned listings. Listings that are exact duplicates, or share an identical description once numbers are removed, form one group, giving 3,913 groups, and a group never spans the training and test sides. Location zones, the text model and both XGBoost models are refitted inside every fold. Trained 2026-11-06.
+
+| Model | MAE | Median error | Mean error | R² | Within 10% | Within 20% |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Listing | €33,786 | 13.4% | 18.9% | 0.771 | 38.9% | 67.4% |
+| Property | €39,424 | 15.2% | 22.6% | 0.699 | 34.9% | 61.6% |
+
+- **Listing model:** estimates and Fair/Overpriced labels on listing pages. It adds the listing's description, with all numbers removed, to the property features. Each listing page shows its held-out estimate, so no listing is scored by a model trained on its own price.
+- **Property model:** Predict, Find and zone prices, from the features a user can enter.
+
+These are asking prices, so the models estimate asking prices, not sale prices. The cleaner drops listings it treats as outliers using statistics over all listings, so these figures describe listings that pass it.
+
+
+## Run from a fresh clone
+
+Start the API with `cd backend && uvicorn main:app --reload --port 8000` after
+installing `backend/requirements.txt`. No private data or trained artefacts are required.
+If `backend/data/final_data.json` is missing, or `USE_DEMO_DATA=1`, the loader
+uses the bundled synthetic, fictional `backend/demo/listings.json` and logs a
+warning. `/health` reports `data_source: "demo"`; both frontends display a notice.
+Listings, filters, areas, comparable listings and market insights remain available.
+Without a trained model, estimate, predict-by-zone and suggest return HTTP 503
+with a JSON `detail` explanation. Demo listings have no held-out estimates, so
+their estimates remain unavailable even with a model installed. No demo training
+is needed. Start the Vite UI with `cd frontend && npm install && npm run dev`,
+or the Next.js UI with `cd nextapp && npm install && npm run dev`.
