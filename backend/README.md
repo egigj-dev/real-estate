@@ -126,12 +126,12 @@ pytest -v
 
 ## Model evaluation
 
-Each listing's error was measured with a model that never saw it: grouped 5-fold cross-fitting over the 4,127 cleaned listings. Listings that are exact duplicates, or share an identical description once numbers are removed, form one group, giving 3,892 groups, and a group never spans the training and test sides. Location zones, the text model and both XGBoost models are refitted inside every fold. Trained 2026-11-06.
+Each listing's error was measured with a model that never saw it: grouped 5-fold cross-fitting over the 4,148 cleaned listings. Listings that are exact duplicates, or share an identical description once numbers are removed, form one group, giving 3,913 groups, and a group never spans the training and test sides. Location zones, the text model and both XGBoost models are refitted inside every fold. Trained 2026-11-06.
 
 | Model | MAE | Median error | Mean error | R² | Within 10% | Within 20% |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Listing | €34,464 | 13.8% | 19.9% | 0.764 | 37.0% | 66.5% |
-| Property | €39,744 | 15.3% | 23.3% | 0.690 | 34.6% | 62.0% |
+| Listing | €33,786 | 13.4% | 18.9% | 0.771 | 38.9% | 67.4% |
+| Property | €39,424 | 15.2% | 22.6% | 0.699 | 34.9% | 61.6% |
 
 - **Listing model:** estimates and Fair/Overpriced labels on listing pages. It adds the listing's description, with all numbers removed, to the property features. Each listing page shows its held-out estimate, so no listing is scored by a model trained on its own price.
 - **Property model:** Predict, Find and zone prices, from the features a user can enter.

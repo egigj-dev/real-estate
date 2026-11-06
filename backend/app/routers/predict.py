@@ -11,18 +11,10 @@ from ml import get_price_by_zone, get_feature_explanation
 
 router = APIRouter(tags=["Predict"])
 
-# ── Growth rate methodology ───────────────────────────────────────────────────
-# Source: Albanian INSTAT housing price index + World Bank Albania property data
-# 2018-2024 avg annual nominal appreciation by zone type:
-#   Qendra / premium urban:  ~7-8% (demand > supply, gentrification pressure)
-#   Mixed mid-ring:          ~5-6%
-#   Periphery / suburban:    ~4-5%
-# We use conservative midpoints. These are estimates, not guarantees.
-# Growth rates keyed on substrings of zone names produced by train_model.py:
-#   "Qendra & Blloku", "Qendra A"          → 7.5%
-#   "Zona e Mesme A",  "Zona e Mesme B"    → 5.5%
-#   "Periferia A",     "Periferia B"       → 4.5%
-# Source: INSTAT + World Bank Albania 2018-2024 nominal appreciation.
+# Growth scenario: fixed, assumed annual rates by zone type. They are not
+# derived from this dataset (which has no listing dates) and have not been
+# checked against a published source, so the API and UI label them as a
+# scenario, not a forecast.
 _GROWTH_BY_ZONE_NAME = {
     "qendra":   0.075,   # Qendra & Blloku / Qendra A
     "blloku":   0.075,
@@ -137,10 +129,9 @@ def predict_by_zone(body: PredictRequest, df=Depends(get_df), model=Depends(get_
         enriched.append(ZonePrediction(**zone, future_prices=future))
 
     growth_note = (
-        "Normat e rritjes vijnë nga të dhënat e INSTAT dhe Bankës Botërore "
-        "për tregun shqiptar 2018-2024: Qendra & Blloku ~7.5%/vit, "
-        "Zona e Mesme ~5.5%/vit, Periferia ~4.5%/vit (mesatare nominale). "
-        "Nuk janë garanci kthimi."
+        "Skenar me norma të supozuara: Qendra & Blloku ~7.5%/vit, "
+        "Zona e Mesme ~5.5%/vit, Periferia ~4.5%/vit. Normat nuk llogariten "
+        "nga këto të dhëna dhe nuk janë parashikim apo garanci kthimi."
     )
 
     return PredictResponse(

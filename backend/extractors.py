@@ -2,6 +2,21 @@ import pandas as pd
 import re
 from typing import Tuple, Optional
 
+# A number as written in Albanian listings: "1.200", "1,200" and "1 200" mean
+# 1200; "1,5" and "1.5" are decimals.
+NUMBER = r'(\d{1,3}(?:[.,\s]\d{3})+(?![\d])|\d+(?:[.,]\d+)?)'
+
+
+def parse_number(raw: str) -> Optional[float]:
+    s = raw.strip()
+    if re.fullmatch(r'\d{1,3}(?:[.,\s]\d{3})+', s):
+        return float(re.sub(r'[.,\s]', '', s))
+    try:
+        return float(s.replace(',', '.'))
+    except ValueError:
+        return None
+
+
 class PriceExtractor:
     def extract(self, text: str) -> Tuple[Optional[float], Optional[str]]:
         if pd.isna(text):
@@ -9,21 +24,17 @@ class PriceExtractor:
         text = str(text).lower()
         
         # Price per m²
-        m = re.search(r'(\d+[\s,]*\d*)\s*(?:€|euro)\s*(?:/|per)\s*m(?:2|²)', text)
+        m = re.search(NUMBER + r'\s*(?:€|euro)\s*(?:/|per)\s*m(?:2|²)', text)
         if m:
-            try:
-                return float(m.group(1).replace(' ', '').replace(',', '.')), 'per_sqm'
-            except:
-                pass
-        
+            value = parse_number(m.group(1))
+            if value is not None and 300 <= value <= 6000:
+                return value, 'per_sqm'
+
         # Total price (take last)
-        matches = re.findall(r'(?:€|euro)\s*(\d+[\s,]*\d*)', text)
+        matches = re.findall(r'(?:€|euro)\s*' + NUMBER, text)
         if matches:
-            try:
-                price = float(matches[-1].replace(' ', '').replace(',', '.'))
-                return (price, 'total') if price > 100 else (None, None)
-            except:
-                pass
+            price = parse_number(matches[-1])
+            return (price, 'total') if price and price > 100 else (None, None)
         return None, None
 
 

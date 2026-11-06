@@ -347,7 +347,7 @@ export default function PredictPage() {
       <PageHeader
         eyebrow="Parashikim çmimi"
         title="Sa kushton & si rritet çmimi?"
-        subtitle="Modeli XGBoost parashikon çmimin në çdo zonë, shpjegon cilët faktorë e drejtojnë atë çmim, dhe projekton rritjen e investimit pas 2 dhe 5 vitesh."
+        subtitle="Modeli XGBoost parashikon çmimin në çdo zonë, shpjegon cilët faktorë e drejtojnë atë çmim, dhe tregon një skenar rritjeje me norma të supozuara pas 2 dhe 5 vitesh."
       />
 
       <Container className="pb-5 px-0">
@@ -422,7 +422,7 @@ export default function PredictPage() {
                       💡 Pas parashikimit do të shohësh:<br/>
                       · Çmimin në secilën zonë të Tiranës<br/>
                       · Faktorët e modelit — i njëjti shpjegim për të gjitha zonat<br/>
-                      · Projeksionin e investimit pas 2 dhe 5 vitesh
+                      · Skenar rritjeje pas 2 dhe 5 vitesh (norma të supozuara)
                     </div>
                   )}
                 </Card.Body>
@@ -502,7 +502,7 @@ export default function PredictPage() {
                     borderRadius: 10, fontSize: 12, color: 'var(--muted)', lineHeight: 1.7,
                     marginTop: 8,
                   }}>
-                    <strong style={{ color: 'var(--text)' }}>📌 Normat e rritjes:</strong>{' '}
+                    <strong style={{ color: 'var(--text)' }}>📌 Skenari i rritjes:</strong>{' '}
                     {result.growth_note}
                   </div>
                 )}

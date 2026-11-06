@@ -234,7 +234,7 @@ export default function PredictPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Parashikim çmimi" title="Sa kushton & si rritet çmimi?" subtitle="Modeli XGBoost parashikon çmimin në çdo zonë, shpjegon faktorët, dhe projekton rritjen pas 2 dhe 5 vitesh." />
+      <PageHeader eyebrow="Parashikim çmimi" title="Sa kushton & si rritet çmimi?" subtitle="Modeli XGBoost parashikon çmimin në çdo zonë, shpjegon faktorët, dhe tregon një skenar rritjeje me norma të supozuara pas 2 dhe 5 vitesh." />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr]">
         <Card>
@@ -294,7 +294,7 @@ export default function PredictPage() {
               <div className="mt-5 flex gap-2.5 rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
                 <Lightbulb className="h-4 w-4 shrink-0" />
                 <div>
-                  Pas parashikimit do të shohësh çmimin në secilën zonë, faktorët e modelit, dhe projeksionin e investimit pas 2 dhe 5 vitesh.
+                  Pas parashikimit do të shohësh çmimin në secilën zonë, faktorët e modelit, dhe një skenar rritjeje pas 2 dhe 5 vitesh, me norma të supozuara.
                 </div>
               </div>
             )}
@@ -339,7 +339,7 @@ export default function PredictPage() {
               {result.growth_note && (
                 <div className="mt-2 flex gap-2.5 rounded-md border border-border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">
                   <Info className="h-4 w-4 shrink-0" />
-                  <div><strong className="text-foreground">Normat e rritjes:</strong> {result.growth_note}</div>
+                  <div><strong className="text-foreground">Skenari i rritjes:</strong> {result.growth_note}</div>
                 </div>
               )}
             </>
