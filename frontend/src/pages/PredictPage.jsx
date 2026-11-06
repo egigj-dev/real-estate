@@ -177,7 +177,7 @@ function ZoneCard({ zone, color, rank, expanded, onToggle }) {
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           <div style={{ fontSize: 22, fontWeight: 800, color }}>{formatPrice(zone.estimated_price)}</div>
           <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>
-            ±{zone.band_pct}% · {formatPrice(zone.range_low)} – {formatPrice(zone.range_high)}
+            ±{zone.band_pct}% · Gabimi tipik {zone.typical_error_pct}% · {formatPrice(zone.range_low)} – {formatPrice(zone.range_high)}
           </div>
         </div>
 

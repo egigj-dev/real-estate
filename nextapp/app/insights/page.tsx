@@ -2,32 +2,20 @@
 import { useEffect, useMemo, useState } from "react"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
-import { TrendingUp, TrendingDown, Minus } from "lucide-react"
+import { Minus } from "lucide-react"
 import PageHeader from "@/components/layout/PageHeader"
 import { Card, CardContent } from "@/components/ui/card"
-import Sparkline from "@/components/charts/Sparkline"
 import { fetchMarketInsights } from "@/lib/api"
 import type { MarketInsights } from "@/lib/types"
 
 const ZoneBarChart = dynamic(() => import("@/components/charts/ZoneBarChart"), { ssr: false })
 
-function PulseItem({ label, value, trend, deltaLabel, seed, placeholder }: {
-  label: string; value: string; trend: "up" | "down"; deltaLabel: string; seed: string; placeholder?: boolean
-}) {
-  const Icon = trend === "up" ? TrendingUp : TrendingDown
+function StatItem({ label, value, note }: { label: string; value: string; note: string }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex items-center gap-1 text-[10.5px] text-muted-foreground">
-        {label}
-        {placeholder && <span className="text-muted-foreground/60" title="Vlerë ilustruese — lidhet me të dhëna reale së shpejti"> ●</span>}
-      </div>
+      <div className="text-[10.5px] text-muted-foreground">{label}</div>
       <div className="text-[14.5px] font-bold text-foreground">{value}</div>
-      <div className="flex items-center justify-between">
-        <span className={`flex items-center gap-0.5 text-[10.5px] font-semibold ${trend === "up" ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>
-          <Icon className="h-3 w-3" /> {deltaLabel}
-        </span>
-        <Sparkline seed={seed} trend={trend} width={56} height={20} />
-      </div>
+      <div className="text-[10.5px] text-muted-foreground">{note}</div>
     </div>
   )
 }
@@ -51,6 +39,8 @@ export default function InsightsPage() {
     () => [...(data?.neighborhoods ?? [])].sort((a, b) => b.avg_price_per_sqm - a.avg_price_per_sqm),
     [data]
   )
+  const top = sortedByPpsqm[0]
+  const bottom = sortedByPpsqm[sortedByPpsqm.length - 1]
 
   return (
     <>
@@ -71,10 +61,10 @@ export default function InsightsPage() {
             <CardContent className="p-5">
               <div className="mb-3.5 text-[15px] font-semibold text-foreground">Pulsi i Tregut</div>
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                <PulseItem label="Çmimi Mesatar" value={`${Math.round(data.overall_median_price_per_sqm).toLocaleString()} €/m²`} trend="up" deltaLabel="+4.6% në vit" seed="avg-price" placeholder />
-                <PulseItem label="Rritja më e Lartë" value={sortedByPpsqm[0]?.neighborhood ?? "—"} trend="up" deltaLabel="+22.8% në vit" seed="growth" placeholder />
-                <PulseItem label="Më e Nënvlerësuara" value={sortedByPpsqm[sortedByPpsqm.length - 1]?.neighborhood ?? "—"} trend="down" deltaLabel="-12% nën çmimin e drejtë" seed="undervalued" placeholder />
-                <PulseItem label="Rendimenti më i Mirë" value={sortedByPpsqm[1]?.neighborhood ?? "—"} trend="up" deltaLabel="5.7% rendiment mesatar" seed="yield" placeholder />
+                <StatItem label="Çmimi Mesatar" value={`${Math.round(data.overall_median_price_per_sqm).toLocaleString()} €/m²`} note="mediana e të gjitha pronave" />
+                <StatItem label="Zona më e Shtrenjtë" value={top?.neighborhood ?? "—"} note={top ? `${Math.round(top.avg_price_per_sqm).toLocaleString()} €/m² mesatarisht` : ""} />
+                <StatItem label="Zona më e Lirë" value={bottom?.neighborhood ?? "—"} note={bottom ? `${Math.round(bottom.avg_price_per_sqm).toLocaleString()} €/m² mesatarisht` : ""} />
+                <StatItem label="Diferenca e Çmimit" value={top && bottom ? `×${(top.avg_price_per_sqm / bottom.avg_price_per_sqm).toFixed(1)}` : "—"} note="€/m²: zona më e shtrenjtë ndaj më të lirës" />
               </div>
             </CardContent>
           </Card>

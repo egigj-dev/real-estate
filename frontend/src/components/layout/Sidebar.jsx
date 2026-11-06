@@ -1,5 +1,4 @@
 import { IconHome, IconCompass, IconMap, IconSearch, IconTarget, IconBarChart } from '../icons/Icons'
-import Sparkline from '../charts/Sparkline'
 
 const NAV_ITEMS = [
   { key: 'overview', label: 'Përmbledhje',         Icon: IconHome },
@@ -37,8 +36,7 @@ export default function Sidebar({ page, onNavigate, listingsCount }) {
       <div className="sidebar-footer">
         <div className="footer-card">
           <div className="footer-card-top">
-            <span className="footer-card-label">Tregu u përditësua</span>
-            <Sparkline seed="footer-card" trend="up" width={56} height={20} />
+            <span className="footer-card-label">Të dhënat dhe modeli</span>
           </div>
           <div className="footer-card-model">Modeli: XGBoost</div>
           <div className="footer-card-count">

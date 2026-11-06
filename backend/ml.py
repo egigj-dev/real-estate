@@ -11,42 +11,20 @@ import numpy as np
 import pandas as pd
 
 # ---------------------------------------------------------------------------
-# Feature columns — order matters for scaler
+# Structured property features
 # ---------------------------------------------------------------------------
-FEATURE_COLS = [
-    "area_sqm", "floor", "bedrooms", "bathrooms",
-    "has_elevator", "has_parking_space",
-    "distance_from_center", "total_rooms",
-    "neighborhood_cluster", "dist_to_nearest_center",
-]
+from train_model import FEATURE_COLS, base_features
 
 # ---------------------------------------------------------------------------
 # Label thresholds
 # ---------------------------------------------------------------------------
-OVERPRICED_THRESHOLD  = 1.10   # actual > estimated × 1.10
-UNDERPRICED_THRESHOLD = 0.90   # actual < estimated × 0.90
 RANGE_BAND            = 0.08   # ±8 %
 
 # ---------------------------------------------------------------------------
-# Scaler path (loaded lazily so ml.py can be imported without the file)
+# Artefacts loaded lazily
 # ---------------------------------------------------------------------------
-_SCALER_PATH  = Path(__file__).resolve().parent / "model" / "scaler.joblib"
 _BANDS_PATH   = Path(__file__).resolve().parent / "model" / "price_bands.joblib"
-_ZONE_CFG_PATH = Path(__file__).resolve().parent / "model" / "zone_config.joblib"
-_scaler_cache = None
 _bands_cache  = None
-_zone_cfg_cache = None
-
-
-def _get_scaler():
-    global _scaler_cache
-    if _scaler_cache is None:
-        if not _SCALER_PATH.exists():
-            raise FileNotFoundError(
-                f"Scaler not found at {_SCALER_PATH}. Run train_model.py first."
-            )
-        _scaler_cache = joblib.load(_SCALER_PATH)
-    return _scaler_cache
 
 
 def _get_bands() -> dict:
@@ -60,43 +38,46 @@ def _get_bands() -> dict:
     return _bands_cache
 
 
-def _get_zone_cfg() -> dict:
-    """Load zone_config saved by train_model.py, or return empty dict."""
-    global _zone_cfg_cache
-    if _zone_cfg_cache is None:
-        if _ZONE_CFG_PATH.exists():
-            _zone_cfg_cache = joblib.load(_ZONE_CFG_PATH)
-        else:
-            _zone_cfg_cache = {}
-    return _zone_cfg_cache
-
-
-def _zone_name(cluster_id: int) -> str:
-    """Resolve cluster_id → human-readable zone name using saved config."""
-    cfg = _get_zone_cfg()
-    names = cfg.get("zone_names", {})
-    # zone_names keys may be int or str depending on how joblib serialised
-    return names.get(cluster_id) or names.get(str(cluster_id)) or f"Cluster {cluster_id}"
-
-
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
-def _build_feature_matrix(df: pd.DataFrame) -> pd.DataFrame:
-    """Return a (n, 10) float DataFrame, NaNs filled with column median.
+def _raw_rows(df):
+    return df.rename(columns={"sqm": "area_sqm", "beds": "bedrooms", "baths": "bathrooms",
+                              "latitude": "lat", "longitude": "lng"})
 
-    Returning a DataFrame (not a bare numpy array) preserves column names so
-    that StandardScaler.transform() doesn't emit a 'no feature names' warning
-    when the scaler was originally fitted on a named DataFrame.
-    """
-    tmp = df.copy()
-    for col in FEATURE_COLS:
-        if col in tmp.columns:
-            tmp[col] = pd.to_numeric(tmp[col], errors="coerce")
-            tmp[col] = tmp[col].fillna(tmp[col].median())
-        else:
-            tmp[col] = 0.0
-    return tmp[FEATURE_COLS].astype(float)
+
+def _build_feature_matrix(df):
+    rows = base_features(_raw_rows(df))
+    rows["zone"] = df.get("neighborhood_cluster", 0)
+    rows["zone_km"] = df.get("dist_to_nearest_center", 0)
+    return rows[FEATURE_COLS].fillna(0).astype(float)
+
+
+def _model_bands(kind):
+    return _get_bands().get(kind, {})
+
+
+def _band(kind, zone):
+    bands = _model_bands(kind)
+    return bands.get(int(zone)) or bands.get("global") or {}
+
+
+def _input_row(features, model, cluster_id=None):
+    cfg = model.zone_cfg
+    cid = cluster_id if cluster_id is not None else features.get("neighborhood_cluster")
+    if cid is None:
+        name = features.get("zone") or features.get("neighborhood")
+        cid = next((k for k, v in cfg["zone_names"].items() if str(v).casefold() == str(name).casefold()), 2)
+    center = cfg["centers"][int(cid)]
+    aliases = {"sqm": "area_sqm", "beds": "bedrooms", "baths": "bathrooms", "latitude": "lat", "longitude": "lng"}
+    values = {aliases.get(k, k): v for k, v in features.items() if v is not None}
+    defaults = dict(area_sqm=80, floor=3, bedrooms=2, bathrooms=1, living_rooms=1, balconies=0,
+                    lat=center[0], lng=center[1], furnishing_status="unknown")
+    for key in FEATURE_COLS:
+        if key.startswith("has_"):
+            defaults[key] = False
+    defaults.update(values)
+    return pd.DataFrame([defaults])
 
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -147,54 +128,20 @@ def _similarity_reason(target: pd.Series, comp: pd.Series) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
-def get_estimate(listing_id: Any, df: pd.DataFrame, model: Any) -> dict:
-    """
-    Run model.predict() for the given listing and determine its price label
-    using cluster-specific error bands computed at training time.
-
-    Inference pipeline:
-      raw features → StandardScaler.transform → model.predict (log space)
-      → np.expm1 → EUR price
-
-    Band & label logic:
-      - Look up this listing's neighborhood_cluster
-      - Use that cluster's p75 relative error as the fair range band
-        (i.e. the range covers the typical model uncertainty for this zone)
-      - Use the cluster's median relative error as the Fair/Overpriced threshold
-        (i.e. only flag if actual price deviates beyond what the model normally
-        gets wrong for this zone)
-      - Floor both at sensible minimums so we never call a 3% deviation Overpriced
-
-    Returns:
-        {
-            estimated_price : float,
-            range_low       : float,
-            range_high      : float,
-            label           : "Fair" | "Overpriced" | "Underpriced",
-            band_pct        : float,   # % band used (for transparency)
-            threshold_pct   : float,   # % threshold used
-        }
-    """
+def get_estimate(listing_id: Any, df: pd.DataFrame, model: Any = None) -> dict:
+    """Serve a stored held-out estimate; never infer on an existing listing."""
     row_mask = df["id"].astype(str) == str(listing_id)
     if not row_mask.any():
         raise KeyError(f"Listing {listing_id} not found")
 
     idx    = df.index[row_mask][0]
-    row_df = df.loc[[idx]]
-
-    # ── ML prediction ─────────────────────────────────────────────────────────
-    raw_features = _build_feature_matrix(row_df)
-    scaler       = _get_scaler()
-    scaled       = scaler.transform(raw_features)
-
-    log_pred  = model.predict(scaled)[0]
-    estimated = float(np.expm1(log_pred))
+    estimated = float(df.loc[idx, "estimate_eur"])
 
     # ── Look up cluster-specific error bands ──────────────────────────────────
-    bands = _get_bands()
+    bands = _model_bands("listing")
 
     try:
-        cluster_id = int(float(df.loc[idx, "neighborhood_cluster"]))
+        cluster_id = int(float(df.loc[idx, "estimate_zone"] if "estimate_zone" in df else df.loc[idx, "neighborhood_cluster"]))
     except (ValueError, TypeError, KeyError):
         cluster_id = -1
 
@@ -229,7 +176,7 @@ def get_estimate(listing_id: Any, df: pd.DataFrame, model: Any) -> dict:
         label = "Fair"
 
     return {
-        "estimated_price": round(estimated, 2),
+        "estimated_price": estimated,
         "range_low":       range_low,
         "range_high":      range_high,
         "label":           label,
@@ -238,147 +185,27 @@ def get_estimate(listing_id: Any, df: pd.DataFrame, model: Any) -> dict:
     }
 
 
-def get_suggestions_from_features(
-    features: dict,
-    df: pd.DataFrame,
-    model: Any,
-    n: int = 10,
-) -> dict:
-    """
-    Given a set of desired property features from the user (no existing listing),
-    find the n most similar listings in the dataset AND estimate a fair price
-    for the described property.
-
-    Input features dict keys (all optional, missing values filled with cluster median):
-        sqm, floor, beds, baths,
-        has_elevator, has_parking_space,
-        neighborhood_cluster  (int — resolved from zone name before calling)
-        distance_from_center  (float km — filled from cluster mean if missing)
-        dist_to_nearest_center (float — filled from cluster mean if missing)
-
-    Returns:
-        {
-            estimated_price: float,
-            range_low: float,
-            range_high: float,
-            band_pct: float,
-            suggestions: [
-                {id, price, sqm, beds, baths, address, neighborhood,
-                 property_type, latitude, longitude, price_per_sqm,
-                 match_score, distance_label}
-            ]
-        }
-    """
-    # ── Resolve cluster-level defaults for missing spatial features ───────────
-    cluster_id = features.get("neighborhood_cluster")
-
-    # Build cluster-level medians from the full df to fill missing values
-    if cluster_id is not None and "neighborhood_cluster" in df.columns:
-        cluster_mask = df["neighborhood_cluster"] == float(cluster_id)
-        cluster_df   = df[cluster_mask] if cluster_mask.any() else df
-    else:
-        cluster_df = df
-
-    def cluster_median(col: str, fallback: float) -> float:
-        if col in cluster_df.columns:
-            v = cluster_df[col].median()
-            return float(v) if pd.notna(v) else fallback
-        return fallback
-
-    # Build a synthetic single-row DataFrame with the user's features,
-    # filling any missing fields with cluster medians
-    sqm   = float(features.get("sqm")   or cluster_median("sqm",   80.0))
-    floor = float(features.get("floor") or cluster_median("floor",  3.0))
-    beds  = float(features.get("beds")  or cluster_median("beds",   2.0))
-    baths = float(features.get("baths") or cluster_median("baths",  1.0))
-
-    has_elevator      = float(bool(features.get("has_elevator",      False)))
-    has_parking_space = float(bool(features.get("has_parking_space", False)))
-
-    dist_center  = float(features.get("distance_from_center")    or cluster_median("distance_from_center",  3.0))
-    dist_nearest = float(features.get("dist_to_nearest_center")  or cluster_median("dist_to_nearest_center", 0.5))
-    total_rooms  = beds + baths + 1.0   # beds + baths + kitchen approximation
-    nc           = float(cluster_id) if cluster_id is not None else cluster_median("neighborhood_cluster", 0.0)
-
-    synthetic_row = pd.DataFrame([{
-        "area_sqm":              sqm,
-        "floor":                 floor,
-        "bedrooms":              beds,
-        "bathrooms":             baths,
-        "has_elevator":          has_elevator,
-        "has_parking_space":     has_parking_space,
-        "distance_from_center":  dist_center,
-        "total_rooms":           total_rooms,
-        "neighborhood_cluster":  nc,
-        "dist_to_nearest_center": dist_nearest,
-    }])
-
-    # ── ML price estimate for this synthetic property ─────────────────────────
-    scaler   = _get_scaler()
-    scaled   = scaler.transform(synthetic_row[FEATURE_COLS].astype(float))
-    log_pred = model.predict(scaled)[0]
-    estimated = float(np.expm1(log_pred))
-
-    # Dynamic bands from cluster
-    bands         = _get_bands()
-    cluster_bands = bands.get(int(nc) if pd.notna(nc) else -1) or bands.get("global") or {}
-    band_pct      = float(np.clip(cluster_bands.get("p75_rel_error", RANGE_BAND), 0.08, 0.35))
-
-    # ── Nearest-neighbour search ──────────────────────────────────────────────
-    matrix    = _build_feature_matrix(df).values   # (N, 10) ndarray
-    col_min   = matrix.min(axis=0)
-    col_range = np.where((matrix.max(axis=0) - col_min) == 0, 1.0,
-                         matrix.max(axis=0) - col_min)
-    norm      = (matrix - col_min) / col_range
-
-    # Normalise the synthetic vector using the same col_min / col_range
-    syn_vec   = synthetic_row[FEATURE_COLS].astype(float).values[0]
-    syn_norm  = (syn_vec - col_min) / col_range
-
-    dists   = np.linalg.norm(norm - syn_norm, axis=1)
-    nearest = np.argsort(dists)[:n]
-
-    # Score relative to result set: best=97%, worst=45%
-    # Euclidean distance in 10D normalized space is typically 0.3-2.0, NOT 0-1,
-    # so "1-dist" clips to 0 for almost everything. Use relative scaling instead.
-    nearest_dists = dists[nearest]
-    d_min   = nearest_dists.min()
-    d_range = (nearest_dists.max() - d_min) if nearest_dists.max() > d_min else 1.0
-
-    def _match_score(d: float) -> float:
-        norm_d = (d - d_min) / d_range   # 0=best, 1=worst in result set
-        return round(97.0 - norm_d * 52.0, 1)   # maps to [45, 97]
-
+def get_suggestions_from_features(features, df, model, n=10):
+    row = _input_row(features, model)
+    x = model.features(row)
+    estimated = float(model.predict(row)[0])
+    band = _band("property", int(x.zone.iloc[0]))
+    width = float(np.clip(band.get("p75_rel_error", RANGE_BAND), .08, .35))
+    matrix = model.features(_raw_rows(df)).to_numpy()
+    span = np.ptp(matrix, axis=0)
+    span[span == 0] = 1
+    distances = np.linalg.norm((matrix - x.to_numpy()[0]) / span, axis=1)
+    nearest = np.argsort(distances)[:n]
     suggestions = []
     for rank, i in enumerate(nearest):
-        row       = df.iloc[i]
-        match_pct = _match_score(float(dists[i]))
-
-        suggestions.append({
-            "id":             str(row["id"]),
-            "price":          float(row["price"]),
-            "sqm":            float(row["sqm"]),
-            "beds":           int(row.get("beds", 0) or 0),
-            "baths":          float(row.get("baths", 0) or 0),
-            "floor":          float(row["floor"]) if pd.notna(row.get("floor")) else None,
-            "address":        row.get("address"),
-            "neighborhood":   row.get("neighborhood"),
-            "property_type":  row.get("property_type"),
-            "latitude":       float(row["latitude"])  if pd.notna(row.get("latitude"))  else None,
-            "longitude":      float(row["longitude"]) if pd.notna(row.get("longitude")) else None,
-            "price_per_sqm":  float(row["price_per_sqm"]) if pd.notna(row.get("price_per_sqm")) else None,
-            "furnished":      bool(row.get("furnished", False)),
-            "match_score":    match_pct,
-            "rank":           rank + 1,
-        })
-
-    return {
-        "estimated_price": round(estimated, 2),
-        "range_low":       round(estimated * (1 - band_pct), 2),
-        "range_high":      round(estimated * (1 + band_pct), 2),
-        "band_pct":        round(band_pct * 100, 1),
-        "suggestions":     suggestions,
-    }
+        r = df.iloc[i]
+        suggestions.append(dict(id=str(r["id"]), price=float(r.price), sqm=float(r.sqm),
+            beds=int(r.get("beds", 0)), baths=float(r.get("baths", 0)), floor=float(r.floor),
+            address=r.get("address"), neighborhood=r.get("neighborhood"), property_type=r.get("property_type"),
+            latitude=r.get("latitude"), longitude=r.get("longitude"), price_per_sqm=r.get("price_per_sqm"),
+            furnished=bool(r.get("furnished", False)), match_score=round(97 - 52*rank/max(1, len(nearest)-1), 1), rank=rank+1))
+    return dict(estimated_price=round(estimated, 2), range_low=round(estimated*(1-width), 2),
+                range_high=round(estimated*(1+width), 2), band_pct=round(width*100, 1), suggestions=suggestions)
 
 
 def get_comps(listing_id: Any, df: pd.DataFrame, n: int = 5) -> list[dict]:
@@ -439,253 +266,43 @@ def get_comps(listing_id: Any, df: pd.DataFrame, n: int = 5) -> list[dict]:
 
     return comps
 
-def get_price_by_zone(
-    features: dict,
-    df: pd.DataFrame,
-    model: Any,
-) -> list[dict]:
-    """
-    Run the XGBoost model with the user's features, once per neighborhood
-    cluster.  Spatial features (distance_from_center, dist_to_nearest_center)
-    are filled with each cluster's median so the prediction reflects what
-    that zone actually looks like, not a generic average.
-
-    Input features dict keys (all optional):
-        sqm, floor, beds, baths,
-        has_elevator (bool), has_parking_space (bool)
-
-    Returns list (one entry per cluster), sorted cheapest → most expensive:
-        [
-          {
-            cluster_id:            int,
-            zone_name:             str,
-            estimated_price:       float,
-            price_per_sqm:         float,
-            range_low:             float,
-            range_high:            float,
-            band_pct:              float,
-            avg_zone_price:        float,   # mean actual price in this cluster
-            avg_zone_price_per_sqm: float,
-            listing_count:         int,
-          }
-        ]
-    """
-    scaler = _get_scaler()
-    bands  = _get_bands()
-
-    # Resolve user inputs with sensible defaults
-    sqm            = float(features.get("sqm")   or 80.0)
-    floor_val      = float(features.get("floor") or 3.0)
-    beds           = float(features.get("beds")  or 2.0)
-    baths          = float(features.get("baths") or 1.0)
-    has_elevator   = float(bool(features.get("has_elevator",      False)))
-    has_parking    = float(bool(features.get("has_parking_space", False)))
-    total_rooms    = beds + baths + 1.0
-
-    # Unique clusters
-    clusters = sorted(df["neighborhood_cluster"].dropna().unique())
-
+def get_price_by_zone(features, df, model):
     results = []
-    for cluster_id in clusters:
-        cid   = int(cluster_id)
-        cmask = df["neighborhood_cluster"] == cluster_id
-        cdf   = df[cmask]
-
-        def cmedian(col: str, fallback: float) -> float:
-            if col in cdf.columns:
-                v = cdf[col].median()
-                return float(v) if pd.notna(v) else fallback
-            return fallback
-
-        dist_center  = cmedian("distance_from_center",   3.0)
-        dist_nearest = cmedian("dist_to_nearest_center", 0.5)
-
-        # Zone name
-        zone_name = _zone_name(cid)
-
-        # Build feature row for this cluster
-        row = pd.DataFrame([{
-            "area_sqm":               sqm,
-            "floor":                  floor_val,
-            "bedrooms":               beds,
-            "bathrooms":              baths,
-            "has_elevator":           has_elevator,
-            "has_parking_space":      has_parking,
-            "distance_from_center":   dist_center,
-            "total_rooms":            total_rooms,
-            "neighborhood_cluster":   float(cid),
-            "dist_to_nearest_center": dist_nearest,
-        }])
-
-        scaled    = scaler.transform(row[FEATURE_COLS].astype(float))
-        log_pred  = model.predict(scaled)[0]
-        estimated = float(np.expm1(log_pred))
-
-        # Dynamic band for this cluster
-        cluster_bands = bands.get(cid) or bands.get("global") or {}
-        band_pct      = float(np.clip(
-            cluster_bands.get("p75_rel_error", RANGE_BAND), 0.08, 0.35
-        ))
-
-        # Actual zone stats from data
-        avg_price        = float(cdf["price"].mean())
-        avg_price_per_sqm = float((cdf["price"] / cdf["sqm"].replace(0, np.nan)).mean())
-
-        results.append({
-            "cluster_id":              cid,
-            "zone_name":               zone_name,
-            "estimated_price":         round(estimated, 2),
-            "price_per_sqm":           round(estimated / sqm, 2),
-            "range_low":               round(estimated * (1 - band_pct), 2),
-            "range_high":              round(estimated * (1 + band_pct), 2),
-            "band_pct":                round(band_pct * 100, 1),
-            "avg_zone_price":          round(avg_price, 2),
-            "avg_zone_price_per_sqm":  round(avg_price_per_sqm, 2),
-            "listing_count":           int(len(cdf)),
-        })
-
-    # Sort cheapest → most expensive
-    results.sort(key=lambda x: x["estimated_price"])
-    return results
+    for cid, name in model.zone_cfg["zone_names"].items():
+        # Use the representative coordinates for each requested zone.
+        row = _input_row({k: v for k, v in features.items() if k not in ("lat", "lng", "latitude", "longitude")}, model, cid)
+        estimated = float(model.predict(row)[0])
+        sqm = float(row.area_sqm.iloc[0])
+        band = _band("property", cid)
+        width = float(np.clip(band.get("p75_rel_error", RANGE_BAND), .08, .35))
+        stats = model.zone_cfg["cluster_stats"][cid]
+        results.append(dict(cluster_id=cid, zone_name=name, estimated_price=round(estimated, 2),
+            price_per_sqm=round(estimated/sqm, 2), range_low=round(estimated*(1-width), 2),
+            range_high=round(estimated*(1+width), 2), band_pct=round(width*100, 1),
+            typical_error_pct=round(band.get("p50_rel_error", 0)*100, 1),
+            avg_zone_price=stats["mean_price"], avg_zone_price_per_sqm=stats["mean_ppsqm"], listing_count=stats["count"]))
+    return sorted(results, key=lambda r: r["estimated_price"])
 
 
-def get_feature_explanation(
-    features: dict,
-    cluster_id: int,
-    df: pd.DataFrame,
-    model: Any,
-) -> list[dict]:
-    """
-    For a given set of features and zone, explain what drives the predicted price.
-    Uses XGBoost feature_importances_ (gain) to rank features,
-    then compares each input value to the cluster median to show direction.
-
-    Returns list of dicts sorted by importance desc:
-        [{ feature, label, user_value, zone_median, unit,
-           importance_pct, direction, insight }]
-    """
-    # Feature importance from model (gain-based)
-    importances = model.feature_importances_   # array len == FEATURE_COLS
-    total_imp   = importances.sum() or 1.0
-    imp_pct     = {col: float(importances[i]) / total_imp * 100
-                   for i, col in enumerate(FEATURE_COLS)}
-
-    # Cluster medians
-    cmask  = df["neighborhood_cluster"] == float(cluster_id) if cluster_id is not None else pd.Series(True, index=df.index)
-    cdf    = df[cmask] if cmask.any() else df
-
-    def cmed(raw_col: str, fallback: float) -> float:
-        # raw_col is the FEATURE_COLS name (e.g. "area_sqm"),
-        # df uses renamed cols (e.g. "sqm")
-        alias = {"area_sqm": "sqm", "bedrooms": "beds", "bathrooms": "baths"}
-        col   = alias.get(raw_col, raw_col)
-        if col in cdf.columns:
-            v = cdf[col].median()
-            return float(v) if pd.notna(v) else fallback
-        return fallback
-
-    sqm   = float(features.get("sqm")   or cmed("area_sqm", 80))
-    floor = float(features.get("floor") or cmed("floor", 3))
-    beds  = float(features.get("beds")  or cmed("bedrooms", 2))
-    baths = float(features.get("baths") or cmed("bathrooms", 1))
-    has_el  = float(bool(features.get("has_elevator",      False)))
-    has_pk  = float(bool(features.get("has_parking_space", False)))
-    dist_c  = cmed("distance_from_center",   3.0)
-    tot_r   = beds + baths + 1.0
-    nc      = float(cluster_id) if cluster_id is not None else cmed("neighborhood_cluster", 0)
-    dist_n  = cmed("dist_to_nearest_center", 0.5)
-
-    user_vals = {
-        "area_sqm":               sqm,
-        "floor":                  floor,
-        "bedrooms":               beds,
-        "bathrooms":              baths,
-        "has_elevator":           has_el,
-        "has_parking_space":      has_pk,
-        "distance_from_center":   dist_c,
-        "total_rooms":            tot_r,
-        "neighborhood_cluster":   nc,
-        "dist_to_nearest_center": dist_n,
-    }
-
-    medians = {
-        "area_sqm":               cmed("area_sqm", 80),
-        "floor":                  cmed("floor", 3),
-        "bedrooms":               cmed("bedrooms", 2),
-        "bathrooms":              cmed("bathrooms", 1),
-        "has_elevator":           cmed("has_elevator", 0),
-        "has_parking_space":      cmed("has_parking_space", 0),
-        "distance_from_center":   cmed("distance_from_center", 3),
-        "total_rooms":            beds + baths + 1,
-        "neighborhood_cluster":   nc,
-        "dist_to_nearest_center": cmed("dist_to_nearest_center", 0.5),
-    }
-
-    labels = {
-        "area_sqm":               "Sipërfaqja",
-        "floor":                  "Kati",
-        "bedrooms":               "Dhoma gjumi",
-        "bathrooms":              "Banjo",
-        "has_elevator":           "Ashensor",
-        "has_parking_space":      "Parking",
-        "distance_from_center":   "Distanca nga qendra",
-        "total_rooms":            "Dhoma totale",
-        "neighborhood_cluster":   "Zona",
-        "dist_to_nearest_center": "Dendësia e zonës",
-    }
-
-    units = {
-        "area_sqm": "m²", "floor": "", "bedrooms": "", "bathrooms": "",
-        "has_elevator": "", "has_parking_space": "",
-        "distance_from_center": "km", "total_rooms": "",
-        "neighborhood_cluster": "", "dist_to_nearest_center": "",
-    }
-
-    # For distance features, higher = lower price (inverted effect)
-    inverted = {"distance_from_center", "dist_to_nearest_center"}
-
-    results = []
-    for col in FEATURE_COLS:
-        uv  = user_vals[col]
-        med = medians[col]
-        imp = imp_pct[col]
-
-        if col in ("neighborhood_cluster",) or imp < 1.0:
-            continue   # skip low-importance / categorical
-
-        diff = uv - med
-        if abs(diff) < 0.001:
-            direction = "neutral"
-        elif col in inverted:
-            direction = "up" if diff < 0 else "down"
-        else:
-            direction = "up" if diff > 0 else "down"
-
-        pct_diff = (diff / med * 100) if med != 0 else 0
-        unit     = units[col]
-
-        if col in ("has_elevator", "has_parking_space"):
-            insight = (
-                f"{'Ka' if uv else 'Nuk ka'} {labels[col].lower()} "
-                f"({'mesatarja: ka' if med > 0.5 else 'mesatarja: nuk ka'})"
-            )
-        else:
-            sign = "+" if pct_diff >= 0 else ""
-            insight = (
-                f"{labels[col]}: {uv:.0f}{unit} "
-                f"(zona: {med:.0f}{unit}, {sign}{pct_diff:.0f}%)"
-            )
-
-        results.append({
-            "feature":      col,
-            "label":        labels[col],
-            "user_value":   round(uv, 2),
-            "zone_median":  round(med, 2),
-            "unit":         unit,
-            "importance_pct": round(imp, 1),
-            "direction":    direction,   # "up" | "down" | "neutral"
-            "insight":      insight,
-        })
-
-    results.sort(key=lambda x: x["importance_pct"], reverse=True)
-    return results[:7]   # top 7 most important
+def get_feature_explanation(features, cluster_id, df, model):
+    x = model.features(_input_row(features, model, cluster_id)).iloc[0]
+    medians = model.features(_raw_rows(df)).median()
+    importance = model.feature_importances_
+    total = importance.sum() or 1
+    labels = {"area_sqm": "Sipërfaqja", "floor": "Kati", "bedrooms": "Dhoma gjumi",
+              "bathrooms": "Banjo", "distance_from_center": "Distanca nga qendra",
+              "has_elevator": "Ashensor", "has_parking_space": "Parking"}
+    result = []
+    for col, weight in zip(FEATURE_COLS, importance):
+        if col in ("zone", "lat", "lng") or weight/total < .01:
+            continue
+        value, median = float(x[col]), float(medians[col])
+        diff = value-median
+        if col in ("zone_km", "distance_from_center"):
+            diff = -diff
+        label = labels.get(col, col.replace("_", " "))
+        result.append(dict(feature=col, label=label, user_value=value, zone_median=median,
+            unit="m²" if col == "area_sqm" else "", importance_pct=round(weight/total*100, 1),
+            direction="neutral" if abs(diff) < .001 else "up" if diff > 0 else "down",
+            insight=f"{label}: {value:.1f} (zona: {median:.1f})"))
+    return sorted(result, key=lambda r: r["importance_pct"], reverse=True)[:7]

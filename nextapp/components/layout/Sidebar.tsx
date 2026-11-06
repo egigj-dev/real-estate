@@ -2,7 +2,6 @@
 import Link from "next/link"
 import { Building2, LayoutDashboard, Compass, Map, Search, Target, BarChart3 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import Sparkline from "../charts/Sparkline"
 
 const NAV_ITEMS = [
   { href: "/",          label: "Përmbledhje",          Icon: LayoutDashboard },
@@ -48,8 +47,7 @@ export default function Sidebar({ pathname, listingsCount }: { pathname: string;
       <div className="mt-4">
         <div className="rounded-lg border border-border bg-muted/40 p-3.5">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-foreground">Tregu u përditësua</span>
-            <Sparkline seed="footer-card" trend="up" width={56} height={20} />
+            <span className="text-[11px] font-semibold text-foreground">Të dhënat dhe modeli</span>
           </div>
           <div className="text-[11px] text-muted-foreground">Modeli: XGBoost</div>
           <div className="text-[11px] text-muted-foreground">

@@ -1,20 +1,4 @@
-"""
-tests/conftest.py
------------------
-Self-contained fixtures.  Zero file I/O — all data is synthetic.
-
-Strategy
---------
-* `fake_df`     — 10-row DataFrame that covers every column the app touches.
-* `fake_model`  — lightweight GradientBoostingRegressor trained on fake_df.
-* `fake_scaler` — StandardScaler fitted on the same fake data.
-* `client`      — FastAPI TestClient wired to the above via two mechanisms:
-    1. app.dependency_overrides  → intercepts Depends(get_df) / Depends(get_model)
-                                   in every router and the /health endpoint.
-    2. loader_module attribute patch → makes direct calls like `get_df()` in
-                                   test bodies also return the fake data.
-    3. ml._scaler_cache patch       → stops ml.py from loading scaler.joblib.
-"""
+"""Synthetic API fixtures with stored held-out estimates and a fast property pipeline."""
 
 import sys
 from pathlib import Path
@@ -26,8 +10,6 @@ import numpy as np
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
-from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.preprocessing import StandardScaler
 
 
 # ---------------------------------------------------------------------------
@@ -62,54 +44,32 @@ def fake_df() -> pd.DataFrame:
     df = pd.DataFrame(rows, columns=cols)
     df["beds"]  = df["beds"].astype(int)
     df["baths"] = df["baths"].astype(float)
+    df["estimate_eur"] = df["price"] * 0.95
+    df["estimate_fold"] = np.arange(len(df)) % 5
     return df
 
 
 # ---------------------------------------------------------------------------
-# 2. Fake model + scaler  (trained on fake_df so feature shapes match)
+# 2. Fast property pipeline with the production feature interface
 # ---------------------------------------------------------------------------
-_FEATURE_COLS = [
-    "area_sqm", "floor", "bedrooms", "bathrooms",
-    "has_elevator", "has_parking_space",
-    "distance_from_center", "total_rooms",
-    "neighborhood_cluster", "dist_to_nearest_center",
-]
-
-
-def _build_X(df: pd.DataFrame) -> np.ndarray:
-    """Map fake_df column names → ml.py FEATURE_COLS and return float array."""
-    col_map = {"sqm": "area_sqm", "beds": "bedrooms", "baths": "bathrooms"}
-    tmp = df.rename(columns=col_map)
-    for col in _FEATURE_COLS:
-        if col not in tmp.columns:
-            tmp[col] = 0.0
-    return tmp[_FEATURE_COLS].astype(float).fillna(0).values
-
-
 @pytest.fixture(scope="session")
-def fake_scaler(fake_df):
-    scaler = StandardScaler()
-    scaler.fit(_build_X(fake_df))
-    return scaler
+def fake_model(fake_df):
+    from train_model import fit_pipeline
+    rows = fake_df.rename(columns={"sqm": "area_sqm", "beds": "bedrooms", "baths": "bathrooms",
+                                   "price": "price_eur", "latitude": "lat", "longitude": "lng"})
+    return fit_pipeline(rows, n_estimators=5, early_stopping_rounds=2)
 
-
-@pytest.fixture(scope="session")
-def fake_model(fake_df, fake_scaler):
-    X = fake_scaler.transform(_build_X(fake_df))
-    y = fake_df["price"].values
-    model = GradientBoostingRegressor(n_estimators=10, random_state=42)
-    model.fit(X, np.log1p(y))
-    return model
 
 
 # ---------------------------------------------------------------------------
 # 3. TestClient — wires fake data into the running FastAPI app
 # ---------------------------------------------------------------------------
 @pytest.fixture(scope="session")
-def client(fake_df, fake_model, fake_scaler):
-    # ── (a) Patch ml.py's scaler cache so it never tries to load scaler.joblib
+def client(fake_df, fake_model):
+    # Isolate the two models' error bands from local training artefacts.
     import ml as ml_module
-    ml_module._scaler_cache = fake_scaler
+    ml_module._bands_cache = {"listing": {"global": {"p50_rel_error": .15, "p75_rel_error": .25}},
+                              "property": {"global": {"p50_rel_error": .2, "p75_rel_error": .3}}}
 
     # ── (b) Patch the loader module BEFORE importing main so that any direct
     #        calls to get_df() / get_model() in test bodies return fake data.

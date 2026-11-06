@@ -104,7 +104,7 @@ function ZoneCard({ zone, color, rank, expanded, onToggle }: {
         </div>
         <div className="shrink-0 text-right">
           <div className="text-lg font-bold" style={{ color }}>{formatPrice(zone.estimated_price)}</div>
-          <div className="mt-0.5 text-[11px] text-muted-foreground">±{zone.band_pct}%</div>
+          <div className="mt-0.5 text-[11px] text-muted-foreground">±{zone.band_pct}% · Gabimi tipik {zone.typical_error_pct}%</div>
         </div>
         <ChevronRight className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", expanded && "rotate-90")} />
       </div>

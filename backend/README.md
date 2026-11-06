@@ -126,6 +126,14 @@ pytest -v
 
 ## Model evaluation
 
-Results from a grouped held-out 20% test split (3,303 training rows, including the 10% early-stopping validation carve-out; 824 test rows), trained on 2026-11-06: MAE €41,039.77, median absolute percentage error 15.95%, MAPE 24.32%, R² 0.6248, 33.37% within 10% and 59.34% within 20%.
+Each listing's error was measured with a model that never saw it: grouped 5-fold cross-fitting over the 4,127 cleaned listings. Listings that are exact duplicates, or share an identical description once numbers are removed, form one group, giving 3,892 groups, and a group never spans the training and test sides. Location zones, the text model and both XGBoost models are refitted inside every fold. Trained 2026-11-06.
 
-Zones come from location only, using six KMeans clusters fitted on training coordinates.
+| Model | MAE | Median error | Mean error | R² | Within 10% | Within 20% |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Listing | €34,464 | 13.8% | 19.9% | 0.764 | 37.0% | 66.5% |
+| Property | €39,744 | 15.3% | 23.3% | 0.690 | 34.6% | 62.0% |
+
+- **Listing model:** estimates and Fair/Overpriced labels on listing pages. It adds the listing's description, with all numbers removed, to the property features. Each listing page shows its held-out estimate, so no listing is scored by a model trained on its own price.
+- **Property model:** Predict, Find and zone prices, from the features a user can enter.
+
+These are asking prices, so the models estimate asking prices, not sale prices. The cleaner drops listings it treats as outliers using statistics over all listings, so these figures describe listings that pass it.

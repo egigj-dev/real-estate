@@ -185,7 +185,7 @@ export default function OverviewPage() {
               <div className="text-[10.5px] text-muted-foreground">Zona Çmimi</div>
             </div>
             <div className="rounded-lg border border-border bg-muted p-3 text-center">
-              <div className="text-lg font-bold text-foreground">{health?.model_metrics?.median_ape_pct != null ? `±${Math.round(health.model_metrics.median_ape_pct)}%` : "—"}</div>
+              <div className="text-lg font-bold text-foreground">{health?.model_metrics?.listing?.median_ape_pct != null ? `±${Math.round(health.model_metrics.listing.median_ape_pct)}%` : "—"}</div>
               <div className="text-[10.5px] text-muted-foreground">Gabimi tipik</div>
               <div className="text-[9px] text-muted-foreground/70">në prona të patestuara</div>
             </div>

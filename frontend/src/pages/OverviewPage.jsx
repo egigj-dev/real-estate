@@ -199,7 +199,7 @@ export default function OverviewPage({ onNavigate }) {
               <div className="stat-tile-label">Zona Çmimi</div>
             </div>
             <div className="stat-tile">
-              <div className="stat-tile-value">{health?.model_metrics?.median_ape_pct != null ? `±${Math.round(health.model_metrics.median_ape_pct)}%` : '—'}</div>
+              <div className="stat-tile-value">{health?.model_metrics?.listing?.median_ape_pct != null ? `±${Math.round(health.model_metrics.listing.median_ape_pct)}%` : '—'}</div>
               <div className="stat-tile-label">Gabimi tipik</div>
               <div className="stat-tile-note">në prona të patestuara</div>
             </div>

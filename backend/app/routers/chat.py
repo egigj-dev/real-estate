@@ -97,7 +97,7 @@ def _keyword_parse(text: str) -> dict:
              'kater': 4, 'katër': 4, 'pese': 5, 'pesë': 5}
     m = re.search(r'(\d)\s*\+\s*1', t)
     if m:
-        beds = int(m.group(1)) + 1
+        beds = int(m.group(1))  # Albanian "2+1": two bedrooms plus a living room
     else:
         m = re.search(r'(\d+)\s+(?:dhoma|bedroom|room)', t)
         if m:

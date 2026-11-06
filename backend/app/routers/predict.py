@@ -42,6 +42,16 @@ def _growth_for_zone(zone_name: str) -> float:
 
 
 class PredictRequest(BaseModel):
+    living_rooms: Optional[int] = None
+    balconies: Optional[int] = None
+    furnishing_status: Optional[str] = None
+    has_terrace: Optional[bool] = None
+    has_garden: Optional[bool] = None
+    has_garage: Optional[bool] = None
+    has_carport: Optional[bool] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    zone: Optional[str] = None
     sqm:               Optional[float] = None
     floor:             Optional[float] = None
     beds:              Optional[int]   = None
@@ -74,6 +84,7 @@ class ZonePrediction(BaseModel):
     price_per_sqm:           float
     range_low:               float
     range_high:              float
+    typical_error_pct:       float
     band_pct:                float
     avg_zone_price:          float
     avg_zone_price_per_sqm:  float
@@ -94,12 +105,7 @@ def predict_by_zone(body: PredictRequest, df=Depends(get_df), model=Depends(get_
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded.")
 
-    features = {
-        "sqm": body.sqm, "floor": body.floor,
-        "beds": body.beds, "baths": body.baths,
-        "has_elevator": body.has_elevator,
-        "has_parking_space": body.has_parking_space,
-    }
+    features = body.model_dump(exclude_none=True)
 
     try:
         zones = get_price_by_zone(features=features, df=df, model=model)

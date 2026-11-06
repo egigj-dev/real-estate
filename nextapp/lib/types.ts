@@ -142,14 +142,17 @@ export interface ModelMetrics {
   r2: number
   share_within_10_pct: number
   share_within_20_pct: number
-  n_train: number
-  n_test: number
-  split: string
-  training_date: string
+  n: number
 }
 
 export interface HealthResponse {
-  model_metrics: ModelMetrics | null
+  model_metrics: {
+    listing: ModelMetrics
+    property: ModelMetrics
+    method: string
+    group_count: number
+    training_date: string
+  } | null
   status: string
   listings_loaded: number
   model_loaded: boolean
@@ -185,6 +188,7 @@ export interface FuturePrice {
 }
 
 export interface ZonePrediction {
+  typical_error_pct: number
   cluster_id: number
   zone_name: string
   estimated_price: number
@@ -206,6 +210,16 @@ export interface PredictResponse {
 }
 
 export interface PredictRequest {
+  living_rooms?: number
+  balconies?: number
+  furnishing_status?: string
+  has_terrace?: boolean
+  has_garden?: boolean
+  has_garage?: boolean
+  has_carport?: boolean
+  lat?: number
+  lng?: number
+  zone?: string
   sqm?: number
   floor?: number
   beds?: number

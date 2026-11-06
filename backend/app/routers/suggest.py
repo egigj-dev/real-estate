@@ -21,6 +21,16 @@ router = APIRouter(tags=["Suggest"])
 
 
 class SuggestRequest(BaseModel):
+    living_rooms: Optional[int] = None
+    balconies: Optional[int] = None
+    furnishing_status: Optional[str] = None
+    has_terrace: Optional[bool] = None
+    has_garden: Optional[bool] = None
+    has_garage: Optional[bool] = None
+    has_carport: Optional[bool] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    zone: Optional[str] = None
     sqm:               Optional[float] = None
     floor:             Optional[float] = None
     beds:              Optional[int]   = None
@@ -90,15 +100,8 @@ def suggest(body: SuggestRequest, df=Depends(get_df), model=Depends(get_model)):
 
     cluster_id = _resolve_cluster(body.neighborhood, df)
 
-    features = {
-        "sqm":               body.sqm,
-        "floor":             body.floor,
-        "beds":              body.beds,
-        "baths":             body.baths,
-        "has_elevator":      body.has_elevator,
-        "has_parking_space": body.has_parking_space,
-        "neighborhood_cluster": cluster_id,
-    }
+    features = body.model_dump(exclude_none=True, exclude={"n"})
+    features["neighborhood_cluster"] = cluster_id
 
     try:
         result = get_suggestions_from_features(features, df, model, n=body.n)

@@ -82,6 +82,7 @@ def test_health_includes_model_metrics(client, tmp_path, monkeypatch):
     path = tmp_path / "metrics.json"
     monkeypatch.setattr(main, "METRICS_PATH", path)
     assert client.get("/health").json()["model_metrics"] is None
-    metrics = {"median_ape_pct": 18.2, "r2": 0.68}
+    metrics = {"listing": {"median_ape_pct": 18.2, "r2": 0.68},
+               "property": {"median_ape_pct": 22.1, "r2": 0.61}}
     path.write_text(json.dumps(metrics))
     assert client.get("/health").json()["model_metrics"] == metrics
