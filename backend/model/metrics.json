@@ -1,0 +1,23 @@
+{
+  "property": {
+    "mae_eur": 39423.58807542895,
+    "median_ape_pct": 15.18370196533203,
+    "mape_pct": 22.640567402242333,
+    "r2": 0.6985452797489435,
+    "share_within_10_pct": 0.3493249758919961,
+    "share_within_20_pct": 0.6162005785920925,
+    "n": 4148
+  },
+  "listing": {
+    "mae_eur": 33786.42366079332,
+    "median_ape_pct": 13.367054295300129,
+    "mape_pct": 18.924719604274145,
+    "r2": 0.7706289730254657,
+    "share_within_10_pct": 0.3888621022179364,
+    "share_within_20_pct": 0.6735776277724205,
+    "n": 4148
+  },
+  "method": "grouped 5-fold cross-fitting; duplicates and identical descriptions share a group",
+  "group_count": 3913,
+  "training_date": "2026-11-06T12:52:11.135338+00:00"
+}

@@ -37,14 +37,37 @@ class TestEstimate:
         assert body["range_low"] < body["estimated_price"]
         assert body["estimated_price"] < body["range_high"]
 
-    def test_range_band_is_roughly_8_percent(self, client):
+    def test_range_uses_saved_zone_p75_band(self, client, fake_df):
+        import ml
+        import numpy as np
         body = client.get("/listings/0/estimate").json()
+        zone = int(fake_df.loc[0, "neighborhood_cluster"])
+        bands = ml._get_bands()["listing"]
+        saved = bands.get(zone) or bands.get("global") or {}
+        band = float(np.clip(saved.get("p75_rel_error", ml.RANGE_BAND), 0.08, 0.35))
         est = body["estimated_price"]
-        low = body["range_low"]
-        high = body["range_high"]
-        # ±8% → low ≈ est * 0.92, high ≈ est * 1.08
-        assert abs(low  - est * 0.92) / est < 0.01
-        assert abs(high - est * 1.08) / est < 0.01
+        assert body["range_low"] == pytest.approx(est * (1 - band), abs=0.02)
+        assert body["range_high"] == pytest.approx(est * (1 + band), abs=0.02)
+
+    @pytest.mark.parametrize("p50, expected", [(0.02, 10), (0.22, 22), (0.5, 30)])
+    def test_p50_threshold(self, client, fake_df, fake_model, monkeypatch, p50, expected):
+        import ml
+        zone = int(fake_df.loc[0, "neighborhood_cluster"])
+        monkeypatch.setattr(ml, "_bands_cache", {"listing": {zone: {
+            "p50_rel_error": p50, "median_rel_error": 0.15, "p75_rel_error": 0.25,
+        }}})
+        df = fake_df.copy()
+        df["price"] = df["price"].astype(float)
+        initial = ml.get_estimate("0", df, fake_model)
+        df.loc[0, "price"] = initial["estimated_price"] * 1.20
+        result = ml.get_estimate("0", df, fake_model)
+        assert result["threshold_pct"] == expected
+        assert result["label"] == ("Overpriced" if expected < 20 else "Fair")
+
+    def test_legacy_median_threshold(self, client, fake_df, fake_model, monkeypatch):
+        import ml
+        monkeypatch.setattr(ml, "_bands_cache", {"listing": {"global": {"median_rel_error": 0.24}}})
+        assert ml.get_estimate("0", fake_df, fake_model)["threshold_pct"] == 24
 
     def test_label_is_valid(self, client):
         for lid in ["0", "1", "2", "3", "4"]:
@@ -160,3 +183,46 @@ class TestComps:
         comps = client.get("/listings/0/comps").json()["comps"]
         ids   = [c["id"] for c in comps]
         assert len(ids) == len(set(ids)), "Duplicate comps returned"
+
+
+def test_estimate_uses_stored_oof_value(fake_df):
+    import ml
+    class NeverPredict:
+        def predict(self, *args):
+            raise AssertionError("Existing listings must never use a fitted model")
+    df = fake_df.copy()
+    df.loc[0, "estimate_eur"] = 123456.789
+    result = ml.get_estimate("0", df, NeverPredict())
+    assert result["estimated_price"] == df.loc[0, "estimate_eur"]
+
+
+def test_listing_bands_use_held_out_zone(fake_df, monkeypatch):
+    import ml
+    df = fake_df.copy()
+    df["estimate_zone"] = 5
+    monkeypatch.setattr(ml, "_bands_cache", {"listing": {
+        5: {"p50_rel_error": .22, "p75_rel_error": .26},
+        0: {"p50_rel_error": .1, "p75_rel_error": .12}}})
+    result = ml.get_estimate("0", df)
+    assert result["threshold_pct"] == 22
+    assert result["band_pct"] == 26
+
+
+def test_property_ranges_use_property_bands(fake_df, fake_model, monkeypatch):
+    import ml
+    monkeypatch.setattr(ml, "_bands_cache", {
+        "property": {"global": {"p50_rel_error": .13, "p75_rel_error": .19}},
+        "listing": {"global": {"p50_rel_error": .22, "p75_rel_error": .31}}})
+    result = ml.get_price_by_zone({"sqm": 80}, fake_df, fake_model)
+    assert all(r["band_pct"] == 19 and r["typical_error_pct"] == 13 for r in result)
+    suggestions = ml.get_suggestions_from_features({"sqm": 80}, fake_df, fake_model)
+    assert suggestions["band_pct"] == 19
+
+
+def test_property_zone_resolves_name_and_coordinates(fake_model):
+    import ml
+    cid, name = next(iter(fake_model.zone_cfg["zone_names"].items()))
+    named = ml._input_row({"zone": name}, fake_model)
+    coords = ml._input_row({"lat": named.lat.iloc[0], "lng": named.lng.iloc[0]}, fake_model)
+    assert int(fake_model.features(named).zone.iloc[0]) == cid
+    assert int(fake_model.features(coords).zone.iloc[0]) == cid

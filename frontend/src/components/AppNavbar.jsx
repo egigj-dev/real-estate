@@ -1,26 +1,68 @@
 import { Navbar, Container } from 'react-bootstrap'
-import { API_BASE } from '../api'
 
-export default function AppNavbar({ onHome }) {
+export default function AppNavbar({ page, onHome, onSuggest, onPredict }) {
   return (
-    <Navbar sticky="top" expand="lg" className="px-3">
-      <Container fluid>
+    <Navbar
+      expand="lg"
+      style={{
+        background:   'rgba(7,17,31,0.85)',
+        backdropFilter: 'blur(12px)',
+        borderBottom: '1px solid var(--border)',
+        position:     'sticky',
+        top:          0,
+        zIndex:       900,
+      }}
+    >
+      <Container fluid className="px-3 px-lg-4">
+        {/* Brand */}
         <Navbar.Brand
-          as="button"
           onClick={onHome}
-          className="navbar-brand"
-          style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+          style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}
         >
-          🏙️ Tirana<span className="gold">Listings</span>
+          <span style={{ fontSize: 22 }}>🏙️</span>
+          <span style={{
+            fontWeight: 800, fontSize: 17,
+            background: 'linear-gradient(90deg,#4fc3f7,#81d4fa)',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+          }}>
+            Tirana Real Estate
+          </span>
         </Navbar.Brand>
 
-        <span className="nav-badge ms-2">Beta</span>
-
-        <div className="ms-auto d-flex align-items-center gap-2">
-          <span className="api-dot" />
-          <span className="api-label d-none d-sm-inline">{API_BASE}</span>
+        {/* Nav tabs */}
+        <div style={{ display: 'flex', gap: 4 }}>
+          <NavTab active={page === 'listings' || page === 'detail'}
+            onClick={onHome}    icon="🏠" label="Listat" />
+          <NavTab active={page === 'suggest'}
+            onClick={onSuggest} icon="🔍" label="Gjej pronën" />
+          <NavTab active={page === 'predict'}
+            onClick={onPredict} icon="📊" label="Parashiko çmimin" />
         </div>
       </Container>
     </Navbar>
+  )
+}
+
+function NavTab({ active, onClick, icon, label }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        background:   active ? 'rgba(79,195,247,0.12)' : 'transparent',
+        border:       active ? '1px solid rgba(79,195,247,0.3)' : '1px solid transparent',
+        borderRadius: 10,
+        padding:      '6px 16px',
+        fontSize:     14,
+        fontWeight:   active ? 700 : 400,
+        color:        active ? '#4fc3f7' : 'var(--muted)',
+        cursor:       'pointer',
+        transition:   'all .15s',
+        display:      'flex',
+        alignItems:   'center',
+        gap:          6,
+      }}
+    >
+      <span>{icon}</span> {label}
+    </button>
   )
 }

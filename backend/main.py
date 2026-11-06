@@ -14,6 +14,8 @@ Architecture
   ml.py                   ← ML utilities (estimate, comps)
 """
 
+import json
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
@@ -21,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import CORS_ORIGINS
 from app.data.loader import get_df, get_model
-from app.routers import comps, estimates, listings, market
+from app.routers import comps, estimates, listings, market, suggest, predict, chat
 
 
 # ---------------------------------------------------------------------------
@@ -60,18 +62,27 @@ app.add_middleware(
 # Routers
 app.include_router(listings.router)          # GET /listings, GET /listings/{id}
 app.include_router(listings.filters_router)  # GET /filters/options
+app.include_router(listings.areas_router)    # GET /areas
 app.include_router(estimates.router)         # GET /listings/{id}/estimate
 app.include_router(comps.router)             # GET /listings/{id}/comps
 app.include_router(market.router)            # GET /market/insights
+app.include_router(suggest.router)           # POST /suggest
+app.include_router(predict.router)           # POST /predict/by-zone
+app.include_router(chat.router)              # POST /chat/parse
 
 
 # ---------------------------------------------------------------------------
 # Health — uses Depends so test dependency_overrides apply automatically
 # ---------------------------------------------------------------------------
+METRICS_PATH = Path(__file__).resolve().parent / "model" / "metrics.json"
+
+
 @app.get("/health", tags=["Health"])
 def health(df=Depends(get_df), model=Depends(get_model)):
+    metrics = json.loads(METRICS_PATH.read_text()) if METRICS_PATH.exists() else None
     return {
         "status":          "ok",
+        "model_metrics":   metrics,
         "listings_loaded": len(df),
         "model_loaded":    model is not None,
     }

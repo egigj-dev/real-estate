@@ -1,54 +1,43 @@
-# Frontend — React + Vite
+# Frontend — React + Vite + Tailwind
 
-## Stack
+Single-page application for Tirana Real Estate — browse, predict, map, and analyze property listings.
 
-- **React 18** — UI
-- **Vite 5** — dev server + build
-- **React Bootstrap** — components
-- **Bootstrap 5** — styling
+## Pages
 
-## Structure
+| Page | Route | Description |
+|------|-------|-------------|
+| **Overview** | `/` | Dashboard with key metrics, quick-search |
+| **Explore** | `/explore` | Browse listings with cards + filters |
+| **Map** | `/map` | Interactive Leaflet map with zone polygons |
+| **Find** | `/find` | Feature-based search ("3-bed near Blloku with parking") |
+| **Predict** | `/predict` | Zone-by-zone price prediction for custom specs |
+| **Insights** | `/insights` | Market analytics & price per sqm by neighborhood |
+| **Detail** | `/detail/:id` | Full property detail + ML estimate + comps + map |
 
-```
-frontend/src/
-├── api.js                 API calls + formatters
-├── App.jsx                Routing (listings ↔ detail)
-├── index.css              Global styles
-├── components/
-│   ├── AppNavbar.jsx
-│   ├── FeatureBadges.jsx
-│   ├── Hero.jsx
-│   ├── ListingCard.jsx
-│   └── SearchableList.jsx
-└── pages/
-    ├── ListingsPage.jsx   Browse + filter
-    └── DetailPage.jsx     Listing detail + ML estimate + comps
-```
+## Tech Stack
+
+- **React 18** — UI framework
+- **Vite 8** — Build tool
+- **Tailwind CSS 4** — Styling
+- **Leaflet + react-leaflet** — Interactive maps
+- **ECharts** — Charts (sparklines, bar charts)
+- **Radix UI** — Accessible UI primitives (select, slider, label)
+- **Lucide React** — Icons
 
 ## Setup
 
 ```bash
 npm install
-```
-
-## Run
-
-Make sure the backend is running on port 8000 first, then:
-
-```bash
 npm run dev
 ```
 
-Open **http://127.0.0.1:5173**
+Opens at **http://localhost:5173**. Backend should be running on port 8000.
 
-> **WSL users:** use `127.0.0.1` not `localhost` in both the browser and `src/api.js`.
+## Backend API URL
 
-## Environment
-
-The API base URL is set at the top of `src/api.js`:
+The app auto-detects the API at `http://localhost:8000`. Override by setting:
 
 ```js
-export const API_BASE = 'http://127.0.0.1:8000'
+// In src/api.js or via environment
+window.RE_API = "https://your-host:8000";
 ```
-
-Change this if your backend runs on a different host or port.
