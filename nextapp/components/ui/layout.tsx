@@ -29,7 +29,7 @@ export function Section({ title, description, action, children, className, id }:
 }) {
   const headingId = id ? `${id}-title` : undefined
   return (
-    <section id={id} aria-labelledby={headingId} className={cn('space-y-4', className)}>
+    <section id={id} aria-labelledby={headingId} className={cn('min-w-0 space-y-4', className)}>
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
         <div className="max-w-3xl space-y-1">
           <h2 id={headingId} className="text-xl font-semibold text-ink">{title}</h2>

@@ -3,6 +3,8 @@
  * and names are reported; there's no scoring. Results depend on how complete
  * OpenStreetMap is around the listing.
  */
+import { distanceKm } from './geo'
+
 const OVERPASS = 'https://overpass-api.de/api/interpreter'
 const RADIUS_M = 1000
 
@@ -35,12 +37,6 @@ function classify(t: Record<string, string>): NearbyKind | null {
   return null
 }
 
-function km(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const r = Math.PI / 180
-  const a = Math.sin(((lat2 - lat1) * r) / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin(((lon2 - lon1) * r) / 2) ** 2
-  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
-
 export async function fetchNearby(lat: number, lon: number, signal?: AbortSignal): Promise<Record<NearbyKind, NearbyPlace[]>> {
   const around = `(around:${RADIUS_M},${lat},${lon})`
   const query = `[out:json][timeout:15];(` +
@@ -65,7 +61,7 @@ export async function fetchNearby(lat: number, lon: number, signal?: AbortSignal
     if (!kind || la == null || lo == null) continue
     const tag = t.amenity ?? t.leisure ?? t.highway ?? t.shop
     const name = t.name && t.name.trim().length > 1 ? t.name.trim() : TAG_NAMES[tag] ?? tag
-    out[kind].push({ name, km: km(lat, lon, la, lo) })
+    out[kind].push({ name, km: distanceKm(lat, lon, la, lo) })
   }
   for (const k of Object.keys(out) as NearbyKind[]) {
     // Sort by distance and drop duplicates (the same place mapped as node and area).

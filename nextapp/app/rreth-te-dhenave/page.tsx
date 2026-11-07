@@ -1,5 +1,8 @@
-import { PageIntro } from '@/components/ui/layout'
+import type { Metadata } from 'next'
+import AboutClient from './AboutClient'
+
+export const metadata: Metadata = { title: 'Rreth të dhënave dhe modelit' }
 
 export default function Page() {
-  return <PageIntro title="Rreth të dhënave" />
+  return <AboutClient />
 }

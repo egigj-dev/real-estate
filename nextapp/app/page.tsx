@@ -1,5 +1,5 @@
-import { PageIntro } from '@/components/ui/layout'
+import HomeClient from './HomeClient'
 
 export default function Page() {
-  return <PageIntro title="Përmbledhje" />
+  return <HomeClient />
 }
