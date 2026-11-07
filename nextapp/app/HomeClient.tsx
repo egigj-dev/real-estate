@@ -83,7 +83,13 @@ export default function HomeClient() {
             title="Ku kërkohet më shumë për m²"
             description="Qyteti i ndarë në katrorë rreth 650 m. Ngjyra tregon medianën e çmimit të kërkuar për m² të njoftimeve brenda çdo katrori. Kalo me miun ose prek një katror për shifrat."
           >
-            <PriceGridMap cells={view.cells} breaks={view.breaks} />
+            {view.cells.length === 0 ? (
+              <p className="rounded-lg border border-line bg-surface-sunken p-4 text-sm text-ink">
+                Njoftimet në këtë server nuk kanë koordinata të mjaftueshme, ndaj harta e çmimeve nuk mund të ndërtohet.
+              </p>
+            ) : (
+              <PriceGridMap cells={view.cells} breaks={view.breaks} />
+            )}
             <div className="grid gap-4 md:grid-cols-[minmax(0,440px)_1fr] md:items-end">
               <RampLegend breaks={view.breaks} caption="Mediana €/m²; kufijtë e grupeve ndajnë njoftimet në gjashtë pjesë të barabarta" />
               <Note className="md:text-right">

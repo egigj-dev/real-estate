@@ -84,10 +84,10 @@ export default function ValuationClient() {
           <form noValidate onSubmit={e => { e.preventDefault(); submit() }} className="space-y-5">
             <div className="grid grid-cols-2 gap-4">
               {NUM_FIELDS.map(f => (
-                <Field key={f.key} label={f.label} hint={f.hint} error={errors[f.key]} className={f.key === 'sqm' ? 'col-span-2' : undefined}>
-                  {({ describedBy, invalid }) => (
+                <Field key={f.key} id={`v-${f.key}`} label={f.label} hint={f.hint} error={errors[f.key]} className={f.key === 'sqm' ? 'col-span-2' : undefined}>
+                  {({ id, describedBy, invalid }) => (
                     <Input
-                      id={`v-${f.key}`}
+                      id={id}
                       type="number"
                       inputMode={f.key === 'sqm' ? 'decimal' : 'numeric'}
                       min={LIMITS[f.key].min}
@@ -170,7 +170,7 @@ export default function ValuationClient() {
 
               <Note className="max-w-prose">
                 Parashikime për çmimin në vitet e ardhshme nuk jepen. Të dhënat janë një fotografi e vetme pa data njoftimesh, ndaj
-                prej tyre nuk mund të nxirret asnjë prirje. Shih <Link href="/rreth-te-dhenave" className="text-primary underline-offset-4 hover:underline">si është ndërtuar modeli</Link>{' '}
+                prej tyre nuk mund të nxirret asnjë prirje. Shih <Link href="/rreth-te-dhenave" className="text-primary underline underline-offset-4">si është ndërtuar modeli</Link>{' '}
                 dhe sa gabon{propertyMetrics ? ` (gabim tipik ${fmtPct(propertyMetrics.median_ape_pct / 100)} në testim)` : ''}.
               </Note>
             </>

@@ -100,6 +100,7 @@ export default function SiteHeader() {
                   <Link
                     href={item.href}
                     aria-current={active ? 'page' : undefined}
+                    onClick={() => setOpen(false)}
                     className={cn('block rounded px-2 py-3 text-base', active ? 'font-medium text-ink' : 'text-ink-muted')}
                   >
                     {item.label}

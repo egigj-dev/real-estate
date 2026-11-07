@@ -2,11 +2,12 @@
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, SlidersHorizontal, X } from 'lucide-react'
 import { fetchAllListings, fetchListings, getAllListings, getFilterOptions } from '@/lib/api'
 import { activeFilterChips, EMPTY_FILTERS, filtersToQuery, filtersToSearch, parseFilters, SORT_OPTIONS, type Filters, type View } from '@/lib/filters'
 import { fmtInt } from '@/lib/format'
+import { hasCoords } from '@/lib/geo'
 import { rampBreaks } from '@/lib/ramp'
 import { ppsqm } from '@/lib/stats'
 import { useAsync } from '@/lib/useAsync'
@@ -35,6 +36,11 @@ export default function ExploreClient() {
   const view: View = sp.get('pamja') === 'harta' ? 'harta' : 'lista'
   const [describeOpen, setDescribeOpen] = useState(sp.get('pershkrim') === '1')
   const [filtersOpen, setFiltersOpen] = useState(false)
+
+  // Remember these results so a listing's page can link straight back to them.
+  useEffect(() => {
+    try { sessionStorage.setItem('prona:last-results', `${pathname}${sp.toString() ? `?${sp.toString()}` : ''}`) } catch { /* storage unavailable */ }
+  }, [pathname, sp])
 
   const go = (next: Filters, nextView: View = view) => router.push(`${pathname}${filtersToSearch(next, nextView)}`, { scroll: false })
   const update = (patch: Partial<Filters>) => go({ ...filters, ...patch, faqja: patch.faqja ?? 1 })
@@ -89,7 +95,8 @@ export default function ExploreClient() {
           </div>
         </aside>
 
-        <div className="min-w-0 space-y-5">
+        <section aria-labelledby="results-title" className="min-w-0 space-y-5">
+          <h2 id="results-title" className="sr-only">Rezultatet</h2>
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
             <p className="text-sm text-ink" aria-live="polite">
               {page.status === 'success'
@@ -182,7 +189,10 @@ export default function ExploreClient() {
             <div className="space-y-3">
               {mapData.status === 'error' && <ErrorState message={mapData.error.message} onRetry={mapData.retry} />}
               {mapData.status === 'loading' && <Loading label="Duke ngarkuar hartën…"><Skeleton className="h-[560px] w-full" /></Loading>}
-              {mapData.status === 'success' && breaks.data && (
+              {mapData.status === 'success' && !mapData.data.some(hasCoords) && (
+                <p className="rounded-lg border border-line bg-surface-sunken p-4 text-sm text-ink">Këto njoftime nuk kanë koordinata, ndaj nuk mund të shfaqen në hartë.</p>
+              )}
+              {mapData.status === 'success' && breaks.data && mapData.data.some(hasCoords) && (
                 <>
                   <ListingsMap listings={mapData.data} breaks={breaks.data} hrefFor={hrefFor} />
                   <div className="grid gap-3 md:grid-cols-[minmax(0,420px)_1fr] md:items-end">
@@ -195,7 +205,7 @@ export default function ExploreClient() {
               )}
             </div>
           )}
-        </div>
+        </section>
       </div>
     </div>
   )

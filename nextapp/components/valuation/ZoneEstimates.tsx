@@ -19,7 +19,7 @@ export default function ZoneEstimates({ zones, exploreHref }: { zones: ZonePredi
 
   return (
     <figure className="space-y-3">
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={'Tabela e vlerësimeve sipas zonës'}>
         <table className="w-full min-w-[640px] text-left text-sm">
           <caption className="sr-only">Vlerësimi i modelit për secilën zonë çmimi, me gabimin e matur</caption>
           <thead className="text-ink-muted">

@@ -1,7 +1,6 @@
 'use client'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { ApiError, fetchComps, fetchEstimate, fetchListing } from '@/lib/api'
@@ -19,20 +18,20 @@ import { EmptyState, ErrorState, Loading, Skeleton } from '@/components/ui/state
 
 const LocationMap = dynamic(() => import('@/components/maps/LocationMap'), { ssr: false, loading: () => <Skeleton className="h-[320px] w-full" /> })
 
+/** Session key holding the last Explore URL, written by the Explore page. */
+export const LAST_RESULTS_KEY = 'prona:last-results'
+
 function BackLink() {
-  const router = useRouter()
-  // Return to the exact results (filters, page) when the visitor came from them.
-  const [fromResults, setFromResults] = useState(false)
+  // Return to the exact results (filters, page, view) the visitor came from, if any.
+  const [results, setResults] = useState<string | null>(null)
   useEffect(() => {
-    try {
-      const ref = document.referrer ? new URL(document.referrer) : null
-      setFromResults(Boolean(ref && ref.origin === location.origin && ref.pathname === '/pronat'))
-    } catch { /* malformed referrer */ }
+    try { setResults(sessionStorage.getItem(LAST_RESULTS_KEY)) } catch { /* storage unavailable */ }
   }, [])
-  const cls = 'inline-flex items-center gap-1.5 text-sm text-primary underline-offset-4 hover:underline'
-  return fromResults
-    ? <button type="button" onClick={() => router.back()} className={cls}><ArrowLeft aria-hidden className="h-4 w-4" /> Kthehu te rezultatet</button>
-    : <Link href="/pronat" className={cls}><ArrowLeft aria-hidden className="h-4 w-4" /> Të gjitha pronat</Link>
+  return (
+    <Link href={results ?? '/pronat'} className="inline-flex items-center gap-1.5 text-sm text-primary underline-offset-4 hover:underline">
+      <ArrowLeft aria-hidden className="h-4 w-4" /> {results ? 'Kthehu te rezultatet' : 'Të gjitha pronat'}
+    </Link>
+  )
 }
 
 export default function DetailClient({ id }: { id: string }) {

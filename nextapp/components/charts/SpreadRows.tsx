@@ -21,7 +21,7 @@ export default function SpreadRows({ rows, caption, extraHeader }: { rows: Sprea
   const x = (v: number) => ((v - min) / (max - min)) * 100
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={caption}>
       <table className="w-full min-w-[680px] text-left text-sm">
         <caption className="sr-only">{caption}</caption>
         <thead className="text-ink-muted">

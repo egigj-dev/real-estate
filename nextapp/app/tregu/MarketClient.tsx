@@ -148,7 +148,7 @@ function AmenityTable({ all }: { all: ListingSummary[] }) {
   if (rows.status === 'loading') return <Loading><Skeleton className="h-32 w-full" /></Loading>
   if (rows.status === 'error') return <ErrorState message={rows.error.message} onRetry={rows.retry} />
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={'Tabela e komoditeteve'}>
       <table className="w-full min-w-[560px] text-left text-sm">
         <caption className="sr-only">Mediana e çmimit për m² me dhe pa komoditete</caption>
         <thead className="text-ink-muted">

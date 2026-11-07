@@ -16,7 +16,7 @@ function MetricsTable({ listing, property }: { listing: ModelMetrics; property: 
     ['Njoftime të testuara', m => fmtInt(m.n)],
   ]
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={'Tabela e saktësisë së modeleve'}>
       <table className="w-full min-w-[520px] text-left text-sm">
         <caption className="sr-only">Saktësia e dy modeleve në njoftime që nuk i panë gjatë trajnimit</caption>
         <thead className="text-ink-muted">

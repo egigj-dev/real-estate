@@ -28,7 +28,7 @@ export default function Comparables({ comps, subjectPpsqm }: { comps: Comparable
         <span className="num">{fmtPct(Math.abs(gap))}</span> {gap >= 0 ? 'më shumë' : 'më pak'}.
       </p>
 
-      <div className="overflow-x-auto rounded-lg border border-line">
+      <div className="overflow-x-auto rounded-lg border border-line" tabIndex={0} role="region" aria-label={'Tabela e pronave të ngjashme'}>
         <table className="w-full min-w-[720px] text-left text-sm">
           <caption className="sr-only">Prona të ngjashme me këtë</caption>
           <thead className="bg-surface-sunken text-ink-muted">

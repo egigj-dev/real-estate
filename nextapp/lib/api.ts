@@ -1,6 +1,6 @@
 import type {
   PaginatedListings, ListingDetail, ListingSummary, EstimateResponse, CompsResponse,
-  FilterOptions, Area, HealthResponse, ChatParseResponse, PredictResponse, PredictRequest, ListingsQuery,
+  FilterOptions, HealthResponse, ChatParseResponse, PredictResponse, PredictRequest, ListingsQuery,
 } from './types'
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:8000'
@@ -47,7 +47,6 @@ export const fetchListing = (id: string) => get<ListingDetail>(`/listings/${enco
 export const fetchEstimate = (id: string) => get<EstimateResponse>(`/listings/${encodeURIComponent(id)}/estimate`)
 export const fetchComps = (id: string) => get<CompsResponse>(`/listings/${encodeURIComponent(id)}/comps`)
 export const fetchFilterOptions = () => get<FilterOptions>('/filters/options')
-export const fetchAreas = () => get<Area[]>('/areas')
 export const fetchHealth = () => get<HealthResponse>('/health')
 export const fetchChatParse = (text: string) => post<ChatParseResponse>('/chat/parse', { text })
 export const fetchPredictByZone = (body: PredictRequest) => post<PredictResponse>('/predict/by-zone', body)
@@ -70,7 +69,6 @@ export async function fetchAllListings(query: ListingsQuery = {}): Promise<Listi
 // Session caches for data that doesn't change while the app is open.
 let allListingsCache: Promise<ListingSummary[]> | null = null
 let healthCache: Promise<HealthResponse> | null = null
-let areasCache: Promise<Area[]> | null = null
 let optionsCache: Promise<FilterOptions> | null = null
 
 function cached<T>(get: () => Promise<T> | null, set: (p: Promise<T> | null) => void, load: () => Promise<T>) {
@@ -83,5 +81,4 @@ function cached<T>(get: () => Promise<T> | null, set: (p: Promise<T> | null) => 
 
 export const getAllListings = () => cached(() => allListingsCache, p => { allListingsCache = p }, () => fetchAllListings())
 export const getHealth = () => cached(() => healthCache, p => { healthCache = p }, fetchHealth)
-export const getAreas = () => cached(() => areasCache, p => { areasCache = p }, fetchAreas)
 export const getFilterOptions = () => cached(() => optionsCache, p => { optionsCache = p }, fetchFilterOptions)

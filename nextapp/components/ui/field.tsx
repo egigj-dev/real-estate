@@ -34,15 +34,18 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
 
 /** Label + control + optional hint/error, wired together with ids. */
 export function Field({
-  label, hint, error, children, className,
+  label, hint, error, children, className, id: fixedId,
 }: {
+  /** Use when the control needs a known id (e.g. to move focus to it). */
+  id?: string
   label: ReactNode
   hint?: ReactNode
   error?: ReactNode
   className?: string
   children: (ids: { id: string; describedBy?: string; invalid: boolean }) => ReactNode
 }) {
-  const id = useId()
+  const generated = useId()
+  const id = fixedId ?? generated
   const hintId = hint ? `${id}-hint` : undefined
   const errorId = error ? `${id}-error` : undefined
   const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined

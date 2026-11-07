@@ -93,7 +93,7 @@ export default function PriceAssessment({ estimate, asking, sqm }: { estimate: E
         <p className="text-sm text-ink-muted">
           Vlerësimi është çmimi që kërkojnë zakonisht shitësit për prona të ngjashme, jo vlera e tregut dhe jo çmimi me të cilin
           do të shitet. Modeli që e llogariti nuk e ka parë këtë njoftim gjatë trajnimit.{' '}
-          <Link href="/rreth-te-dhenave#modeli" className="text-primary underline-offset-4 hover:underline">Si llogaritet</Link>
+          <Link href="/rreth-te-dhenave#modeli" className="text-primary underline underline-offset-4">Si llogaritet</Link>
         </p>
       </div>
     </div>

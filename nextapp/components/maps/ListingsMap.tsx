@@ -7,16 +7,26 @@ import type { ListingSummary } from '@/lib/types'
 import { fmtEur, fmtEurPerSqm, fmtSqm } from '@/lib/format'
 import { listingTitle } from '@/lib/listing'
 import { rampClass } from '@/lib/ramp'
-import { ppsqm } from '@/lib/stats'
+import { ppsqm, quantile } from '@/lib/stats'
 import { TIRANA_CENTER, tileLayerProps, tokenColor, useThemeAttr } from './useTheme'
 
-/** Zooms to the listings whenever the set changes. */
+/**
+ * Zooms to the listings whenever the set changes. Bounds cover the middle 95%
+ * of points in each direction, so a few distant listings don't shrink the city;
+ * those stay on the map, just outside the initial view.
+ */
 function FitToPoints({ points }: { points: [number, number][] }) {
   const map = useMap()
   const key = points.length ? `${points.length}:${points[0][0]}:${points[points.length - 1][1]}` : ''
   useEffect(() => {
-    if (points.length === 1) map.setView(points[0], 15)
-    else if (points.length > 1) map.fitBounds(points, { padding: [24, 24], maxZoom: 15 })
+    if (points.length === 1) { map.setView(points[0], 15); return }
+    if (points.length < 2) return
+    const trim = points.length >= 40
+    const lats = points.map(p => p[0])
+    const lons = points.map(p => p[1])
+    const lo = (xs: number[]) => (trim ? quantile(xs, 0.025) : Math.min(...xs))
+    const hi = (xs: number[]) => (trim ? quantile(xs, 0.975) : Math.max(...xs))
+    map.fitBounds([[lo(lats), lo(lons)], [hi(lats), hi(lons)]], { padding: [24, 24], maxZoom: 15 })
     // Refit only when the set of points changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, map])
