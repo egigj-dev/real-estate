@@ -145,10 +145,9 @@ Start the API with `cd backend && uvicorn main:app --reload --port 8000` after
 installing `backend/requirements.txt`. No private data or trained artefacts are required.
 If `backend/data/final_data.json` is missing, or `USE_DEMO_DATA=1`, the loader
 uses the bundled synthetic, fictional `backend/demo/listings.json` and logs a
-warning. `/health` reports `data_source: "demo"`; both frontends display a notice.
+warning. `/health` reports `data_source: "demo"`; the web app displays a notice.
 Listings, filters, areas, comparable listings and market insights remain available.
 Without a trained model, estimate, predict-by-zone and suggest return HTTP 503
 with a JSON `detail` explanation. Demo listings have no held-out estimates, so
 their estimates remain unavailable even with a model installed. No demo training
-is needed. Start the Vite UI with `cd frontend && npm install && npm run dev`,
-or the Next.js UI with `cd nextapp && npm install && npm run dev`.
+is needed. Start the web app with `cd nextapp && npm ci && npm run dev`.
