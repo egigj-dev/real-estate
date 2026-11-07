@@ -1,75 +1,87 @@
 import type {
-  PaginatedListings, ListingDetail, EstimateResponse, CompsResponse,
-  MarketInsights, FilterOptions, Area, HealthResponse, ChatParseResponse,
-  SuggestResponse, PredictResponse, PredictRequest, SuggestRequest, ListingsQuery,
+  PaginatedListings, ListingDetail, ListingSummary, EstimateResponse, CompsResponse,
+  FilterOptions, Area, HealthResponse, ChatParseResponse, PredictResponse, PredictRequest, ListingsQuery,
 } from './types'
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:8000'
 
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`)
+/** Error carrying the HTTP status, so pages can tell "not found" and "unavailable" apart. */
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message)
+  }
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let res: Response
+  try {
+    res = await fetch(`${API_BASE}${path}`, init)
+  } catch {
+    throw new ApiError('Shërbimi i të dhënave nuk po përgjigjet. Kontrollo që API-ja është në punë.', 0)
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail || `HTTP ${res.status} on ${path}`)
+    const detail = typeof body.detail === 'string' ? body.detail : `HTTP ${res.status}`
+    throw new ApiError(detail, res.status)
   }
   return res.json() as Promise<T>
 }
 
-async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail || `HTTP ${res.status} on ${path}`)
-  }
-  return res.json() as Promise<T>
-}
+const get = <T>(path: string) => request<T>(path)
+const post = <T>(path: string, body: unknown) =>
+  request<T>(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 
 function buildQuery(params: Record<string, unknown>): string {
   const usp = new URLSearchParams()
-  Object.entries(params).forEach(([k, v]) => {
-    if (v === '' || v === null || v === undefined) return
+  for (const [k, v] of Object.entries(params)) {
+    if (v === '' || v === null || v === undefined) continue
     usp.set(k, String(v))
-  })
+  }
   const qs = usp.toString()
   return qs ? `?${qs}` : ''
 }
 
-export function formatPrice(value: number | null | undefined): string {
-  if (value === null || value === undefined) return 'N/A'
-  try { return new Intl.NumberFormat('en-US').format(Math.round(value)) + ' €' }
-  catch { return String(value) + ' €' }
-}
-
-export function listingLabel(item: { address?: string | null; property_type?: string | null; city?: string | null }): string {
-  if (item.address && item.address.trim()) return item.address.trim()
-  const parts: string[] = []
-  if (item.property_type) parts.push(item.property_type.charAt(0).toUpperCase() + item.property_type.slice(1))
-  if (item.city) parts.push(item.city)
-  return parts.join(' · ') || 'Pronë'
-}
-
 export const fetchListings = (query: ListingsQuery = {}) =>
-  get<PaginatedListings>(`/listings${buildQuery({ per_page: 20, page: 1, ...query })}`)
-
+  get<PaginatedListings>(`/listings${buildQuery({ per_page: 24, page: 1, ...query })}`)
 export const fetchListing = (id: string) => get<ListingDetail>(`/listings/${encodeURIComponent(id)}`)
 export const fetchEstimate = (id: string) => get<EstimateResponse>(`/listings/${encodeURIComponent(id)}/estimate`)
 export const fetchComps = (id: string) => get<CompsResponse>(`/listings/${encodeURIComponent(id)}/comps`)
-export const fetchMarketInsights = () => get<MarketInsights>('/market/insights')
 export const fetchFilterOptions = () => get<FilterOptions>('/filters/options')
 export const fetchAreas = () => get<Area[]>('/areas')
 export const fetchHealth = () => get<HealthResponse>('/health')
 export const fetchChatParse = (text: string) => post<ChatParseResponse>('/chat/parse', { text })
-export const fetchSuggestions = (body: SuggestRequest) => post<SuggestResponse>('/suggest', body)
 export const fetchPredictByZone = (body: PredictRequest) => post<PredictResponse>('/predict/by-zone', body)
 
-// Pulls a large single page of listings so the dashboard can compute
-// per-area averages client-side. /market/insights groups by the ML
-// "neighborhood" zone (3–6 clusters), not the real OSM "area_name", so for
-// area-level aggregation we use raw listings instead. This is a SAMPLE
-// (capped at the API's MAX_PER_PAGE), not the full dataset, when total
-// listings exceed the cap.
-export const fetchListingsSample = (per_page = 500) => fetchListings({ per_page, page: 1 })
+const MAX_PER_PAGE = 500
+
+/**
+ * Every listing matching `query`, fetched in pages of 500.
+ * Statistics are computed from the full set rather than a sample.
+ */
+export async function fetchAllListings(query: ListingsQuery = {}): Promise<ListingSummary[]> {
+  const first = await fetchListings({ ...query, per_page: MAX_PER_PAGE, page: 1 })
+  const rest = await Promise.all(
+    Array.from({ length: Math.max(0, first.pages - 1) }, (_, i) =>
+      fetchListings({ ...query, per_page: MAX_PER_PAGE, page: i + 2 })),
+  )
+  return [first, ...rest].flatMap(p => p.listings)
+}
+
+// Session caches for data that doesn't change while the app is open.
+let allListingsCache: Promise<ListingSummary[]> | null = null
+let healthCache: Promise<HealthResponse> | null = null
+let areasCache: Promise<Area[]> | null = null
+let optionsCache: Promise<FilterOptions> | null = null
+
+function cached<T>(get: () => Promise<T> | null, set: (p: Promise<T> | null) => void, load: () => Promise<T>) {
+  const existing = get()
+  if (existing) return existing
+  const p = load().catch(err => { set(null); throw err })
+  set(p)
+  return p
+}
+
+export const getAllListings = () => cached(() => allListingsCache, p => { allListingsCache = p }, () => fetchAllListings())
+export const getHealth = () => cached(() => healthCache, p => { healthCache = p }, fetchHealth)
+export const getAreas = () => cached(() => areasCache, p => { areasCache = p }, fetchAreas)
+export const getFilterOptions = () => cached(() => optionsCache, p => { optionsCache = p }, fetchFilterOptions)
