@@ -4,6 +4,12 @@ import type { ListingSummary } from './types'
 export const known = (v: number | null | undefined): number | null =>
   typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null
 
+/** Like `known`, for counts where 0 is implausible (an apartment always has a bathroom). */
+export const knownPositive = (v: number | null | undefined): number | null => {
+  const k = known(v)
+  return k === null || k === 0 ? null : k
+}
+
 /** "Apartament me 3 dhoma gjumi" / "Garsonierë". Listings have no street addresses. */
 export function listingTitle(l: Pick<ListingSummary, 'beds'>) {
   const beds = known(l.beds)

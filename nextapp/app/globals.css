@@ -95,6 +95,8 @@
 }
 
 /* Leaflet adjustments to match the surface tokens. */
+.map-tiles { filter: grayscale(0.9) contrast(0.85) brightness(1.04); }
+.map-tiles-dark { filter: invert(1) hue-rotate(180deg) grayscale(0.9) brightness(0.75) contrast(0.9); }
 .leaflet-container { font: inherit; background: rgb(var(--surface-sunken)); }
 .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: rgb(var(--surface)); color: rgb(var(--ink)); box-shadow: 0 1px 2px rgb(20 24 21 / 0.06), 0 8px 24px rgb(20 24 21 / 0.12); }
 .leaflet-popup-content-wrapper { border-radius: 6px; }

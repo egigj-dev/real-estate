@@ -1,5 +1,14 @@
-import { PageIntro } from '@/components/ui/layout'
+import type { Metadata } from 'next'
+import { Suspense } from 'react'
+import ExploreClient from './ExploreClient'
+
+export const metadata: Metadata = { title: 'Eksploro pronat' }
 
 export default function Page() {
-  return <PageIntro title="Eksploro pronat" />
+  // useSearchParams needs a Suspense boundary for static rendering.
+  return (
+    <Suspense>
+      <ExploreClient />
+    </Suspense>
+  )
 }

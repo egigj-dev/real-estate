@@ -1,5 +1,9 @@
-import { PageIntro } from '@/components/ui/layout'
+import type { Metadata } from 'next'
+import DetailClient from './DetailClient'
 
-export default function Page() {
-  return <PageIntro title="Prona" />
+export const metadata: Metadata = { title: 'Prona' }
+
+export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  return <DetailClient id={decodeURIComponent(id)} />
 }

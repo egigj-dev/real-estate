@@ -1,8 +1,20 @@
-// Albanian number formatting: "483 000", "13,4". Shared by every page.
-const LOCALE = 'sq-AL'
+// Albanian number formatting: "483 000", "13,4". Done by hand rather than with
+// Intl's sq-AL locale, which some browsers lack and silently replace with English.
+const GROUP = '\u202f' // narrow no-break space, as in CLDR's Albanian format
 
-const intFmt = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 })
-const oneDec = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 1 })
+function group(intPart: string) {
+  return intPart.replace(/\B(?=(\d{3})+(?!\d))/g, GROUP)
+}
+
+function formatNumber(v: number, maxDecimals: number) {
+  const neg = v < 0
+  const [i, d] = Math.abs(v).toFixed(maxDecimals).split('.')
+  const dec = d ? d.replace(/0+$/, '') : ''
+  return `${neg ? '−' : ''}${group(i)}${dec ? `,${dec}` : ''}`
+}
+
+const intFmt = { format: (v: number) => formatNumber(v, 0) }
+const oneDec = { format: (v: number) => formatNumber(v, 1) }
 
 const isNum = (v: number | null | undefined): v is number => typeof v === 'number' && Number.isFinite(v)
 
@@ -13,7 +25,7 @@ export const fmtEurPerSqm = (v: number | null | undefined) => (isNum(v) ? `${int
 export const fmtSqm = (v: number | null | undefined) => (isNum(v) ? `${oneDec.format(v)} m²` : '—')
 /** Percent from a ratio (0.13 → "13%"). */
 export const fmtPct = (ratio: number | null | undefined, digits = 0) =>
-  isNum(ratio) ? `${new Intl.NumberFormat(LOCALE, { maximumFractionDigits: digits }).format(ratio * 100)}%` : '—'
+  isNum(ratio) ? `${formatNumber(ratio * 100, digits)}%` : '—'
 /** Signed percent from a ratio (0.52 → "+52%"). */
 export const fmtSignedPct = (ratio: number) => `${ratio > 0 ? '+' : ratio < 0 ? '−' : ''}${fmtPct(Math.abs(ratio))}`
 export const fmtSignedEur = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${fmtEur(Math.abs(v))}`
