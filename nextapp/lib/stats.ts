@@ -12,6 +12,20 @@ export function quantile(values: number[], q: number): number {
 
 export const median = (values: number[]) => quantile(values, 0.5)
 
+/**
+ * Approximate 95% confidence interval for the median, from order statistics
+ * (normal approximation to the binomial). Needs at least 8 values.
+ */
+export function medianInterval(values: number[]): [number, number] {
+  const xs = values.filter(Number.isFinite).sort((a, b) => a - b)
+  const n = xs.length
+  if (n < 8) return [NaN, NaN]
+  const half = 1.96 * Math.sqrt(n) / 2
+  const lo = Math.max(0, Math.floor(n / 2 - half))
+  const hi = Math.min(n - 1, Math.ceil(n / 2 + half) - 1)
+  return [xs[lo], xs[hi]]
+}
+
 export interface Summary {
   n: number
   medianPrice: number
@@ -58,15 +72,4 @@ export function histogram(values: number[], lo: number, hi: number, bins: number
     counts[i]++
   }
   return counts.map((count, i) => ({ from: lo + i * width, to: lo + (i + 1) * width, count }))
-}
-
-/** Ray-casting point-in-polygon; polygon is [lat, lon] pairs. */
-export function pointInPolygon(lat: number, lon: number, polygon: [number, number][]) {
-  let inside = false
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const [yi, xi] = polygon[i]
-    const [yj, xj] = polygon[j]
-    if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside
-  }
-  return inside
 }

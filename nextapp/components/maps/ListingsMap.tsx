@@ -2,7 +2,7 @@
 import 'leaflet/dist/leaflet.css'
 import Link from 'next/link'
 import { useEffect, useMemo } from 'react'
-import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from 'react-leaflet'
+import { CircleMarker, MapContainer, Polygon, Popup, TileLayer, useMap } from 'react-leaflet'
 import type { ListingSummary } from '@/lib/types'
 import { fmtEur, fmtEurPerSqm, fmtSqm } from '@/lib/format'
 import { listingTitle } from '@/lib/listing'
@@ -34,15 +34,17 @@ function FitToPoints({ points }: { points: [number, number][] }) {
 }
 
 /** Listings as points coloured by €/m² class. Canvas rendering keeps 4,000+ points responsive. */
-export default function ListingsMap({ listings, breaks, hrefFor, height = 560 }: {
+export default function ListingsMap({ listings, breaks, hrefFor, height = 560, outline }: {
   listings: ListingSummary[]
+  /** An area to outline, e.g. the hexagon chosen on the home map. */
+  outline?: [number, number][]
   breaks: number[]
   hrefFor: (id: string) => string
   height?: number
 }) {
   const theme = useThemeAttr()
   const colors = useMemo(
-    () => [0, 1, 2, 3, 4, 5].map(i => tokenColor(`ramp-${i}`)),
+    () => [0, 1, 2, 3, 4].map(i => tokenColor(`ramp-${i}`)),
     // Colours are read from CSS tokens, which change with the theme.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [theme],
@@ -54,6 +56,7 @@ export default function ListingsMap({ listings, breaks, hrefFor, height = 560 }:
     <div className="overflow-hidden rounded-lg border border-line" style={{ height }}>
       <MapContainer center={TIRANA_CENTER} zoom={12} scrollWheelZoom={false} preferCanvas className="h-full w-full">
         <TileLayer key={theme} {...tileLayerProps(theme)} />
+        {outline && <Polygon positions={outline} interactive={false} pathOptions={{ color: tokenColor('ink'), weight: 2, dashArray: '5 4', fill: false }} />}
         <FitToPoints points={points.map(l => [l.latitude as number, l.longitude as number])} />
         {points.map(l => {
           const cls = rampClass(ppsqm(l), breaks)

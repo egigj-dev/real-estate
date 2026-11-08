@@ -5,9 +5,10 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, SlidersHorizontal, X } from 'lucide-react'
 import { fetchAllListings, fetchListings, getAllListings, getFilterOptions } from '@/lib/api'
+import type { PaginatedListings } from '@/lib/types'
 import { activeFilterChips, EMPTY_FILTERS, filtersToQuery, filtersToSearch, parseFilters, SORT_OPTIONS, type Filters, type View } from '@/lib/filters'
 import { fmtInt } from '@/lib/format'
-import { hasCoords } from '@/lib/geo'
+import { hasCoords, hexKey, hexPolygon } from '@/lib/geo'
 import { rampBreaks } from '@/lib/ramp'
 import { ppsqm } from '@/lib/stats'
 import { useAsync } from '@/lib/useAsync'
@@ -49,12 +50,25 @@ export default function ExploreClient() {
   const options = useAsync(getFilterOptions, [])
   const zones = options.data?.neighborhoods ?? []
 
-  const page = useAsync(
-    () => fetchListings({ ...filtersToQuery(filters), page: filters.faqja, per_page: PER_PAGE }),
-    [queryKey, filters.faqja],
+  // A hexagon chosen on the home map has no API filter: fetch every listing matching
+  // the other filters once, keep those inside the hexagon, and page in the browser.
+  const hexListings = useMemo(
+    () => (filters.hex
+      ? fetchAllListings(filtersToQuery(filters)).then(ls => ls.filter(l => hasCoords(l) && hexKey(l.latitude!, l.longitude!) === filters.hex))
+      : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [queryKey],
   )
+  const page = useAsync(async (): Promise<PaginatedListings> => {
+    if (hexListings) {
+      const ls = await hexListings
+      const start = (filters.faqja - 1) * PER_PAGE
+      return { total: ls.length, page: filters.faqja, per_page: PER_PAGE, pages: Math.ceil(ls.length / PER_PAGE), listings: ls.slice(start, start + PER_PAGE) }
+    }
+    return fetchListings({ ...filtersToQuery(filters), page: filters.faqja, per_page: PER_PAGE })
+  }, [queryKey, filters.faqja])
   const mapData = useAsync(
-    () => (view === 'harta' ? fetchAllListings(filtersToQuery(filters)) : Promise.resolve([])),
+    () => (view !== 'harta' ? Promise.resolve([]) : hexListings ?? fetchAllListings(filtersToQuery(filters))),
     [queryKey, view],
   )
   // Colour classes come from the whole dataset, so colours mean the same thing under any filter.
@@ -194,9 +208,9 @@ export default function ExploreClient() {
               )}
               {mapData.status === 'success' && breaks.data && mapData.data.some(hasCoords) && (
                 <>
-                  <ListingsMap listings={mapData.data} breaks={breaks.data} hrefFor={hrefFor} />
-                  <div className="grid gap-3 md:grid-cols-[minmax(0,420px)_1fr] md:items-end">
-                    <RampLegend breaks={breaks.data} caption="Ngjyra: çmimi i kërkuar për m², në gjashtë grupe me numër të ngjashëm pronash" />
+                  <ListingsMap listings={mapData.data} breaks={breaks.data} hrefFor={hrefFor} outline={filters.hex ? hexPolygon(filters.hex) : undefined} />
+                  <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,320px)] md:items-end">
+                    <RampLegend breaks={breaks.data} caption="Çmimi i kërkuar për m² i çdo njoftimi" />
                     <Note className="md:text-right">
                       Vendndodhjet janë ato të njoftimeve dhe mund të jenë të përafërta. Kliko një pikë për detajet.
                     </Note>

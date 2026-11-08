@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { fmtEur, fmtEurCompact, fmtPct, fmtSignedPct, fmtSqm } from '@/lib/format'
 import { activeFilterChips, EMPTY_FILTERS, filtersToQuery, filtersToSearch, parseFilters } from '@/lib/filters'
 import { cleanDescription, distanceLabel, knownPositive, listingTitle, similarityReason } from '@/lib/listing'
-import { median, quantile } from '@/lib/stats'
+import { median, medianInterval, quantile } from '@/lib/stats'
 import { DEFAULT_INPUT, inputToSearch, parseInput, validate } from '@/lib/valuation'
-import { MIN_CELL_LISTINGS, priceGrid } from '@/lib/geo'
+import { differsFrom, hexCells, hexKey, hexPolygon, MIN_HEX_LISTINGS, zoneRegions } from '@/lib/geo'
 import { rampBreaks, rampClass } from '@/lib/ramp'
 import type { ListingSummary } from '@/lib/types'
 
@@ -93,20 +93,61 @@ describe('statistics', () => {
     expect(quantile([1, 2, 3, 4], 0.25)).toBeCloseTo(1.75)
     expect(Number.isNaN(median([]))).toBe(true)
   })
-  it('classes values into six ramp steps', () => {
-    const breaks = rampBreaks(Array.from({ length: 600 }, (_, i) => i))
-    expect(breaks).toHaveLength(5)
+  it('classes values into five ramp steps', () => {
+    const breaks = rampBreaks(Array.from({ length: 500 }, (_, i) => i))
+    expect(breaks).toHaveLength(4)
     expect(rampClass(-1, breaks)).toBe(0)
-    expect(rampClass(10_000, breaks)).toBe(5)
+    expect(rampClass(10_000, breaks)).toBe(4)
   })
-  it('only reports grid cells with enough listings', () => {
-    const at = (lat: number, lon: number, i: number): ListingSummary =>
-      ({ id: String(i), price: 100_000, sqm: 100, beds: 2, furnished: false, latitude: lat, longitude: lon, price_per_sqm: 1000 + i })
-    const dense = Array.from({ length: MIN_CELL_LISTINGS }, (_, i) => at(41.3301, 19.8201, i))
-    const sparse = Array.from({ length: MIN_CELL_LISTINGS - 1 }, (_, i) => at(41.4001, 19.9001, i))
-    const cells = priceGrid([...dense, ...sparse])
-    expect(cells).toHaveLength(1)
-    expect(cells[0].n).toBe(MIN_CELL_LISTINGS)
-    expect(cells[0].median).toBe(1002)
+  it('gives a median interval only with enough values', () => {
+    expect(medianInterval([1, 2, 3]).every(Number.isNaN)).toBe(true)
+    const [lo, hi] = medianInterval(Array.from({ length: 101 }, (_, i) => i))
+    expect(lo).toBeLessThan(50)
+    expect(hi).toBeGreaterThan(50)
+  })
+})
+
+const at = (lat: number, lon: number, i: number, zone = 'A'): ListingSummary =>
+  ({ id: String(i), price: 100_000, sqm: 100, beds: 2, furnished: false, latitude: lat, longitude: lon, price_per_sqm: 1000 + i, neighborhood: zone })
+
+describe('hexagons', () => {
+  it('puts a point inside the hexagon it is keyed to', () => {
+    const key = hexKey(41.3301, 19.8201)
+    const poly = hexPolygon(key)
+    expect(poly).toHaveLength(6)
+    const lat = poly.reduce((s, p) => s + p[0], 0) / 6
+    const lon = poly.reduce((s, p) => s + p[1], 0) / 6
+    expect(hexKey(lat, lon)).toBe(key)
+    // Pointy-top: the east–west span is the flat-to-flat width, √3 × 400 ≈ 693 m ≈ 0.0083° of longitude here.
+    const lons = poly.map(p => p[1])
+    expect(Math.max(...lons) - Math.min(...lons)).toBeGreaterThan(0.007)
+    expect(Math.max(...lons) - Math.min(...lons)).toBeLessThan(0.0095)
+  })
+  it('marks cells below the minimum as sparse and records their dominant zone', () => {
+    const dense = Array.from({ length: MIN_HEX_LISTINGS }, (_, i) => at(41.3301, 19.8201, i, i < 5 ? 'Qendra' : 'Mesme'))
+    const sparse = Array.from({ length: MIN_HEX_LISTINGS - 1 }, (_, i) => at(41.4001, 19.9001, i))
+    const cells = hexCells([...dense, ...sparse])
+    expect(cells).toHaveLength(2)
+    const d = cells.find(c => !c.sparse)!
+    expect(d.n).toBe(MIN_HEX_LISTINGS)
+    expect(d.zone).toBe('Qendra')
+    expect(cells.filter(c => c.sparse)).toHaveLength(1)
+  })
+})
+
+describe('pricing zones', () => {
+  it('builds one region per zone that contains its own listings', () => {
+    const west = Array.from({ length: 20 }, (_, i) => at(41.32 + (i % 5) * 0.002, 19.78 + Math.floor(i / 5) * 0.002, i, 'Perëndim'))
+    const east = Array.from({ length: 20 }, (_, i) => at(41.32 + (i % 5) * 0.002, 19.85 + Math.floor(i / 5) * 0.002, i, 'Lindje'))
+    const regions = zoneRegions([...west, ...east])
+    expect(regions.map(r => r.zone).sort()).toEqual(['Lindje', 'Perëndim'])
+    const w = regions.find(r => r.zone === 'Perëndim')!
+    expect(Math.max(...w.polygon.map(p => p[1]))).toBeLessThan(19.85)
+    expect(w.n).toBe(20)
+  })
+  it('only reports a difference when the reference is outside the interval', () => {
+    expect(differsFrom({ n: 50, median: 2000, low: 1900, high: 2100 }, 1639)).toBe(true)
+    expect(differsFrom({ n: 50, median: 1700, low: 1600, high: 1800 }, 1639)).toBe(false)
+    expect(differsFrom({ n: 5, median: 3000, low: NaN, high: NaN }, 1639)).toBe(false)
   })
 })

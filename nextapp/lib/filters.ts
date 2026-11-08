@@ -20,6 +20,8 @@ export interface Filters {
   mobilim: 'po' | 'jo' | ''
   rendit: Sort
   faqja: number
+  /** A hexagon chosen on the home map ("q:r"); filtered in the browser, the API has no area filter. */
+  hex: string
 }
 
 export type Sort = '' | 'cmimi-rrites' | 'cmimi-zbrites'
@@ -33,7 +35,7 @@ export const SORT_OPTIONS: { value: Sort; label: string }[] = [
 
 export const EMPTY_FILTERS: Filters = {
   q: '', zona: '', cmin: null, cmax: null, smin: null, smax: null, dhoma: null, banjo: null,
-  ashensor: false, parkim: false, kopsht: false, mobilim: '', rendit: '', faqja: 1,
+  ashensor: false, parkim: false, kopsht: false, mobilim: '', rendit: '', faqja: 1, hex: '',
 }
 
 const num = (v: string | null) => {
@@ -60,6 +62,7 @@ export function parseFilters(sp: URLSearchParams): Filters {
     mobilim: mobilim === 'po' || mobilim === 'jo' ? mobilim : '',
     rendit: rendit === 'cmimi-rrites' || rendit === 'cmimi-zbrites' ? rendit : '',
     faqja: Math.max(1, Math.floor(num(sp.get('faqja')) ?? 1)),
+    hex: /^-?\d+:-?\d+$/.test(sp.get('hex') ?? '') ? sp.get('hex')! : '',
   }
 }
 
@@ -77,6 +80,7 @@ export function filtersToSearch(f: Filters, view: View): string {
   if (f.kopsht) sp.set('kopsht', '1')
   if (f.mobilim) sp.set('mobilim', f.mobilim)
   if (f.rendit) sp.set('rendit', f.rendit)
+  if (f.hex) sp.set('hex', f.hex)
   if (f.faqja > 1) sp.set('faqja', String(f.faqja))
   if (view === 'harta') sp.set('pamja', 'harta')
   const s = sp.toString()
@@ -106,6 +110,7 @@ export function filtersToQuery(f: Filters): ListingsQuery {
 export function activeFilterChips(f: Filters): { key: string; label: string; clear: Partial<Filters> }[] {
   const eur = (v: number) => fmtEur(v)
   const chips: { key: string; label: string; clear: Partial<Filters> }[] = []
+  if (f.hex) chips.push({ key: 'hex', label: 'Zona e zgjedhur në hartë', clear: { hex: '' } })
   if (f.q.trim()) chips.push({ key: 'q', label: `Përshkrimi përmban “${f.q.trim()}”`, clear: { q: '' } })
   if (f.zona) chips.push({ key: 'zona', label: f.zona, clear: { zona: '' } })
   if (f.cmin !== null || f.cmax !== null) {

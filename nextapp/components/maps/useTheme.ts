@@ -18,12 +18,14 @@ export function useThemeAttr(): 'light' | 'dark' {
  * Standard OpenStreetMap tiles (free with attribution). They're muted with a
  * CSS filter (see .map-tiles in globals.css) so the data layer stays readable.
  */
-export function tileLayerProps(theme: 'light' | 'dark') {
+export function tileLayerProps(theme: 'light' | 'dark', muted = false) {
+  // Muting uses a filter, not opacity: semi-transparent tiles from two zoom levels show seams.
+  const cls = ['map-tiles', theme === 'dark' && 'map-tiles-dark', muted && (theme === 'dark' ? 'map-tiles-dark-muted' : 'map-tiles-muted')]
   return {
     url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     maxZoom: 19,
-    className: theme === 'dark' ? 'map-tiles map-tiles-dark' : 'map-tiles',
+    className: cls.filter(Boolean).join(' '),
   }
 }
 

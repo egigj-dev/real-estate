@@ -31,13 +31,12 @@
   --danger: 160 45 38;
   --danger-soft: 248 228 225;
   --focus: 36 61 53;
-  /* Sequential ramp for €/m²: sand to deep green. */
-  --ramp-0: 240 235 221;
-  --ramp-1: 217 220 198;
-  --ramp-2: 181 196 174;
-  --ramp-3: 134 165 147;
-  --ramp-4: 86 127 110;
-  --ramp-5: 44 84 70;
+  /* Sequential ramp for median €/m², five steps: pale sage to forest green. */
+  --ramp-0: 230 232 217;          /* #E6E8D9 */
+  --ramp-1: 195 209 190;          /* #C3D1BE */
+  --ramp-2: 147 175 155;          /* #93AF9B */
+  --ramp-3: 94 135 116;           /* #5E8774 */
+  --ramp-4: 47 90 74;             /* #2F5A4A */
   color-scheme: light;
 }
 
@@ -64,12 +63,11 @@
   --danger: 232 128 116;
   --danger-soft: 62 32 30;
   --focus: 156 196 180;
-  --ramp-0: 52 58 50;
-  --ramp-1: 68 84 72;
-  --ramp-2: 84 112 96;
-  --ramp-3: 104 142 122;
-  --ramp-4: 132 174 152;
-  --ramp-5: 176 212 192;
+  --ramp-0: 46 58 51;
+  --ramp-1: 63 90 76;
+  --ramp-2: 87 128 107;
+  --ramp-3: 127 170 147;
+  --ramp-4: 180 212 193;
   color-scheme: dark;
 }
 
@@ -97,6 +95,9 @@
 /* Leaflet adjustments to match the surface tokens. */
 .map-tiles { filter: grayscale(0.9) contrast(0.85) brightness(1.04); }
 .map-tiles-dark { filter: invert(1) hue-rotate(180deg) grayscale(0.9) brightness(0.75) contrast(0.9); }
+/* Data maps: the basemap recedes so the price layer leads. */
+.map-tiles-muted { filter: grayscale(1) contrast(0.5) brightness(1.2); }
+.map-tiles-dark-muted { filter: invert(1) hue-rotate(180deg) grayscale(1) brightness(0.55) contrast(0.7); }
 .leaflet-container { font: inherit; background: rgb(var(--surface-sunken)); }
 .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: rgb(var(--surface)); color: rgb(var(--ink)); box-shadow: 0 1px 2px rgb(20 24 21 / 0.06), 0 8px 24px rgb(20 24 21 / 0.12); }
 .leaflet-popup-content-wrapper { border-radius: 6px; }

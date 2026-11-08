@@ -1,21 +1,35 @@
 import { fmtInt } from '@/lib/format'
+import { RAMP_STEPS } from '@/lib/ramp'
 
-const STEPS = ['bg-ramp-0', 'bg-ramp-1', 'bg-ramp-2', 'bg-ramp-3', 'bg-ramp-4', 'bg-ramp-5']
+const STEPS = ['bg-ramp-0', 'bg-ramp-1', 'bg-ramp-2', 'bg-ramp-3', 'bg-ramp-4']
 
-/** Legend for the six €/m² classes; `breaks` are the five class boundaries. */
-export default function RampLegend({ breaks, caption = '€ për m²' }: { breaks: number[]; caption?: string }) {
-  if (breaks.length !== 5 || breaks.some(b => !Number.isFinite(b))) return null
-  const labels = [`< ${fmtInt(breaks[0])}`, ...breaks.slice(0, 4).map((b, i) => `${fmtInt(b)}–${fmtInt(breaks[i + 1])}`), `> ${fmtInt(breaks[4])}`]
+/**
+ * Legend for the €/m² classes, with explicit values. `missing` adds a key for
+ * areas drawn without colour because they have too few listings.
+ */
+export default function RampLegend({ breaks, caption, missing }: { breaks: number[]; caption: string; missing?: string }) {
+  if (breaks.length !== RAMP_STEPS - 1 || breaks.some(b => !Number.isFinite(b))) return null
+  const labels = [
+    `deri ${fmtInt(breaks[0])}`,
+    ...breaks.slice(0, -1).map((b, i) => `${fmtInt(b)}–${fmtInt(breaks[i + 1])}`),
+    `mbi ${fmtInt(breaks[breaks.length - 1])}`,
+  ]
   return (
-    <figure className="space-y-1.5">
-      <figcaption className="text-xs text-ink-muted">{caption}</figcaption>
-      <ol className="grid grid-cols-6 gap-px overflow-hidden rounded-sm">
+    <figure className="space-y-2">
+      <figcaption className="text-xs font-medium text-ink">{caption}</figcaption>
+      <ol className="flex flex-wrap gap-x-4 gap-y-1.5">
         {STEPS.map((cls, i) => (
-          <li key={cls} className="space-y-1">
-            <span aria-hidden className={`block h-2 ${cls}`} />
-            <span className="block text-[11px] leading-tight text-ink-muted num">{labels[i]}</span>
+          <li key={cls} className="flex items-center gap-1.5 text-xs text-ink-muted num">
+            <span aria-hidden className={`h-3 w-5 rounded-sm ${cls}`} />
+            {labels[i]}
           </li>
         ))}
+        {missing && (
+          <li className="flex items-center gap-1.5 text-xs text-ink-muted">
+            <span aria-hidden className="h-3 w-5 rounded-sm border border-dashed border-ink-subtle" />
+            {missing}
+          </li>
+        )}
       </ol>
     </figure>
   )

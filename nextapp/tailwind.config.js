@@ -20,7 +20,7 @@ module.exports = {
         focus: token('focus'),
         ramp: {
           0: token('ramp-0'), 1: token('ramp-1'), 2: token('ramp-2'),
-          3: token('ramp-3'), 4: token('ramp-4'), 5: token('ramp-5'),
+          3: token('ramp-3'), 4: token('ramp-4'),
         },
       },
       fontFamily: {

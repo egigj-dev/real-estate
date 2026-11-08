@@ -1,8 +1,11 @@
 import { quantile } from './stats'
 
-/** Six-step class breaks (quintile-like) for €/m², shared by maps and legends. */
+/** Number of colour classes on maps and legends. */
+export const RAMP_STEPS = 5
+
+/** Class boundaries (quintiles): each class holds a fifth of the values. */
 export function rampBreaks(values: number[]): number[] {
-  return [1, 2, 3, 4, 5].map(i => quantile(values, i / 6))
+  return Array.from({ length: RAMP_STEPS - 1 }, (_, i) => quantile(values, (i + 1) / RAMP_STEPS))
 }
 
 export function rampClass(value: number, breaks: number[]): number {
