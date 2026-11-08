@@ -83,7 +83,7 @@ export default function DetailClient({ id }: { id: string }) {
         <header className="flex flex-col gap-6 border-b border-line pb-8 md:flex-row md:items-end md:justify-between">
           <div className="space-y-2">
             <p className="text-sm text-ink-muted">{item.neighborhood ?? 'Zonë e panjohur'} · Tiranë</p>
-            <h1 className="font-serif text-3xl text-ink md:text-4xl">{listingTitle(item)}</h1>
+            <h1 className="font-serif text-[1.875rem] leading-tight text-ink md:text-[2.25rem]">{listingTitle(item)}</h1>
             <p className="num text-base text-ink-muted">{facts.join(' · ')}</p>
           </div>
           <div className="md:text-right">
@@ -115,7 +115,7 @@ export default function DetailClient({ id }: { id: string }) {
       </Section>
 
       <div className="grid gap-12 lg:grid-cols-2">
-        <Section id="karakteristikat" title="Karakteristikat">
+        <Section id="karakteristikat" title="Karakteristikat" description="Siç i ka deklaruar shitësi në njoftim.">
           <Characteristics item={item} />
         </Section>
         <Section id="vendndodhja" title="Vendndodhja" description="Pozicioni sipas njoftimit; rrethi shënon 500 m.">

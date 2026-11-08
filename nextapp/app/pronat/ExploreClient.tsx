@@ -105,7 +105,7 @@ export default function ExploreClient() {
             <SlidersHorizontal aria-hidden /> Filtrat{chips.length ? ` (${chips.length})` : ''}
           </Button>
           <div id="filter-panel" className={cn('mt-4 lg:mt-0 lg:block', filtersOpen ? 'block' : 'hidden')}>
-            <FilterPanel filters={filters} zones={zones} onChange={update} onReset={() => go(EMPTY_FILTERS)} />
+            <FilterPanel filters={filters} zones={zones} onChange={update} />
           </div>
         </aside>
 
@@ -212,7 +212,8 @@ export default function ExploreClient() {
                   <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,320px)] md:items-end">
                     <RampLegend breaks={breaks.data} caption="Çmimi i kërkuar për m² i çdo njoftimi" />
                     <Note className="md:text-right">
-                      Vendndodhjet janë ato të njoftimeve dhe mund të jenë të përafërta. Kliko një pikë për detajet.
+                      Vendndodhjet janë ato të njoftimeve dhe mund të jenë të përafërta; shumë njoftime ndajnë të njëjtën pikë, ndaj
+                      pikat mbivendosen. Kliko një pikë për detajet.
                     </Note>
                   </div>
                 </>

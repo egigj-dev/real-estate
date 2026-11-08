@@ -1,7 +1,11 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
-/** Page title block. Serif is reserved for page titles. */
+/**
+ * Page title block. Type scale used across the app:
+ * home headline 44px serif · page title 36px serif · section 22px sans ·
+ * key figure 28px sans · body 16px · supporting 14px · captions 12px.
+ */
 export function PageIntro({ title, children, aside, className }: {
   title: ReactNode
   children?: ReactNode
@@ -11,7 +15,7 @@ export function PageIntro({ title, children, aside, className }: {
   return (
     <header className={cn('flex flex-col gap-4 border-b border-line pb-6 md:flex-row md:items-end md:justify-between', className)}>
       <div className="max-w-3xl space-y-2">
-        <h1 className="font-serif text-3xl text-ink md:text-4xl">{title}</h1>
+        <h1 className="font-serif text-[1.875rem] leading-tight text-ink md:text-[2.25rem]">{title}</h1>
         {children && <div className="text-base text-ink-muted">{children}</div>}
       </div>
       {aside && <div className="shrink-0">{aside}</div>}

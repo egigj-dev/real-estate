@@ -55,7 +55,7 @@ export default function ListingsMap({ listings, breaks, hrefFor, height = 560, o
   return (
     <div className="overflow-hidden rounded-lg border border-line" style={{ height }}>
       <MapContainer center={TIRANA_CENTER} zoom={12} scrollWheelZoom={false} preferCanvas className="h-full w-full">
-        <TileLayer key={theme} {...tileLayerProps(theme)} />
+        <TileLayer key={theme} {...tileLayerProps(theme, true)} />
         {outline && <Polygon positions={outline} interactive={false} pathOptions={{ color: tokenColor('ink'), weight: 2, dashArray: '5 4', fill: false }} />}
         <FitToPoints points={points.map(l => [l.latitude as number, l.longitude as number])} />
         {points.map(l => {
