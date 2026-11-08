@@ -70,47 +70,6 @@ export interface CompsResponse {
   comps: CompItem[]
 }
 
-export interface NeighborhoodInsight {
-  neighborhood: string
-  avg_price_per_sqm: number
-  avg_price: number
-  listing_count: number
-}
-
-export interface MarketInsights {
-  overall_median_price: number
-  overall_median_price_per_sqm: number
-  neighborhood_count: number
-  neighborhoods: NeighborhoodInsight[]
-}
-
-export interface SuggestionItem {
-  id: string
-  price: number
-  sqm: number
-  beds: number
-  baths: number
-  floor?: number | null
-  address?: string | null
-  neighborhood?: string | null
-  property_type?: string | null
-  latitude?: number | null
-  longitude?: number | null
-  price_per_sqm?: number | null
-  furnished: boolean
-  match_score: number
-  rank: number
-}
-
-export interface SuggestResponse {
-  estimated_price: number
-  range_low: number
-  range_high: number
-  band_pct: number
-  suggestions: SuggestionItem[]
-  neighborhood?: string | null
-}
-
 export interface RangeOption { min: number; max: number }
 export interface IntRangeOption { min: number; max: number }
 
@@ -123,16 +82,6 @@ export interface FilterOptions {
   sqm_range: RangeOption
   beds_range: IntRangeOption
   baths_range: RangeOption
-}
-
-export interface AreaBBox { min_lat: number; max_lat: number; min_lon: number; max_lon: number }
-
-export interface Area {
-  name: string
-  osm_id: number
-  admin_level: string
-  bbox: AreaBBox
-  polygon: [number, number][] // [lat, lon] pairs
 }
 
 export interface ModelMetrics {
@@ -227,11 +176,6 @@ export interface PredictRequest {
   baths?: number
   has_elevator?: boolean
   has_parking_space?: boolean
-}
-
-export interface SuggestRequest extends PredictRequest {
-  neighborhood?: string
-  n?: number
 }
 
 export interface ListingsQuery {

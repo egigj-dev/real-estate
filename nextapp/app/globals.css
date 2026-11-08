@@ -1,72 +1,106 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Design tokens. Values are RGB channels so Tailwind can apply opacity.
+ * Contrast (WCAG 2.1, measured): ink/canvas 13.8, ink-muted/surface 6.0,
+ * primary/surface 11.7, brass-ink/surface 5.2, above/surface 6.2, below/surface 6.3.
+ * brass (fills and markers only) is 3.0 on surface and is never used for text.
+ */
 :root {
-  --background: 0 0% 100%;
-  --foreground: 222.2 84% 4.9%;
-  --card: 0 0% 100%;
-  --card-foreground: 222.2 84% 4.9%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 222.2 84% 4.9%;
-  --primary: 222.2 47.4% 11.2%;
-  --primary-foreground: 210 40% 98%;
-  --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222.2 47.4% 11.2%;
-  --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 46.9%;
-  --accent: 210 40% 96.1%;
-  --accent-foreground: 222.2 47.4% 11.2%;
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 222.2 84% 4.9%;
-  --radius: 0.5rem;
-  --chart-up: 142.1 70.6% 45.3%;
-  --chart-down: 0 72.2% 50.6%;
-  --zone-0: 210 40% 98%; --zone-1: 214 32% 91%; --zone-2: 215 20% 75%;
-  --zone-3: 215 16% 55%; --zone-4: 222.2 47.4% 11.2%; --zone-na: 210 40% 96.1%;
+  --canvas: 247 246 242;          /* #F7F6F2 */
+  --surface: 255 255 255;
+  --surface-sunken: 241 239 233;  /* #F1EFE9 */
+  --ink: 36 40 36;                /* #242824 */
+  --ink-muted: 94 101 95;         /* #5E655F */
+  --ink-subtle: 128 134 128;      /* decorative text only, not body copy */
+  --line: 226 223 214;            /* #E2DFD6 */
+  --line-strong: 143 141 132;     /* #8F8D84 input borders, 3.3:1 */
+  --primary: 36 61 53;            /* #243D35 */
+  --primary-hover: 47 79 69;
+  --primary-soft: 228 236 231;
+  --primary-contrast: 255 255 255;
+  --brass: 181 141 91;            /* #B58D5B */
+  --brass-ink: 138 103 56;        /* #8A6738 */
+  --brass-soft: 244 236 222;
+  --above: 154 74 43;             /* asking price above the model estimate */
+  --above-soft: 246 230 222;
+  --below: 47 107 87;             /* asking price below the model estimate */
+  --below-soft: 225 239 232;
+  --danger: 160 45 38;
+  --danger-soft: 248 228 225;
+  --focus: 36 61 53;
+  /* Sequential ramp for median €/m², five steps: pale sage to forest green. */
+  --ramp-0: 230 232 217;          /* #E6E8D9 */
+  --ramp-1: 195 209 190;          /* #C3D1BE */
+  --ramp-2: 147 175 155;          /* #93AF9B */
+  --ramp-3: 94 135 116;           /* #5E8774 */
+  --ramp-4: 47 90 74;             /* #2F5A4A */
+  color-scheme: light;
 }
 
-[data-theme="dark"] {
-  --background: 222.2 84% 4.9%;
-  --foreground: 210 40% 98%;
-  --card: 222.2 84% 4.9%;
-  --card-foreground: 210 40% 98%;
-  --popover: 222.2 84% 4.9%;
-  --popover-foreground: 210 40% 98%;
-  --primary: 210 40% 98%;
-  --primary-foreground: 222.2 47.4% 11.2%;
-  --secondary: 217.2 32.6% 17.5%;
-  --secondary-foreground: 210 40% 98%;
-  --muted: 217.2 32.6% 17.5%;
-  --muted-foreground: 215 20.2% 65.1%;
-  --accent: 217.2 32.6% 17.5%;
-  --accent-foreground: 210 40% 98%;
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 217.2 32.6% 17.5%;
-  --input: 217.2 32.6% 17.5%;
-  --ring: 212.7 26.8% 83.9%;
-  --zone-0: 217 33% 18%; --zone-1: 215 25% 27%; --zone-2: 215 20% 40%;
-  --zone-3: 215 16% 60%; --zone-4: 210 40% 98%; --zone-na: 217.2 32.6% 17.5%;
+[data-theme='dark'] {
+  --canvas: 18 21 19;
+  --surface: 26 31 28;
+  --surface-sunken: 33 39 35;
+  --ink: 233 232 227;
+  --ink-muted: 162 168 162;
+  --ink-subtle: 128 134 128;
+  --line: 47 54 50;
+  --line-strong: 112 120 114;
+  --primary: 156 196 180;
+  --primary-hover: 178 212 198;
+  --primary-soft: 36 52 46;
+  --primary-contrast: 18 21 19;
+  --brass: 196 160 110;
+  --brass-ink: 211 175 127;
+  --brass-soft: 52 44 33;
+  --above: 224 144 107;
+  --above-soft: 58 38 30;
+  --below: 127 195 168;
+  --below-soft: 30 52 44;
+  --danger: 232 128 116;
+  --danger-soft: 62 32 30;
+  --focus: 156 196 180;
+  --ramp-0: 46 58 51;
+  --ramp-1: 63 90 76;
+  --ramp-2: 87 128 107;
+  --ramp-3: 127 170 147;
+  --ramp-4: 180 212 193;
+  color-scheme: dark;
 }
 
 @layer base {
-  * { @apply border-border; }
-  body { @apply bg-background text-foreground font-sans antialiased; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    @apply bg-canvas font-sans text-ink antialiased;
+    font-feature-settings: 'tnum' 0;
+  }
+  * { @apply border-line; }
+  :focus-visible { outline: 2px solid rgb(var(--focus)); outline-offset: 2px; border-radius: 3px; }
+  ::selection { background: rgb(var(--primary-soft)); }
+  h1, h2, h3 { text-wrap: balance; }
 }
 
-.leaflet-popup-content-wrapper, .leaflet-popup-tip {
-  background: hsl(var(--popover));
-  color: hsl(var(--popover-foreground));
+@layer utilities {
+  /* Tabular figures for prices and statistics so columns align. */
+  .num { font-variant-numeric: tabular-nums; }
 }
 
-@keyframes zone-panel-fade-in {
-  from { opacity: 0; transform: translateY(3px); }
-  to { opacity: 1; transform: translateY(0); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }
-.zone-panel-fade { animation: zone-panel-fade-in 0.25s ease both; }
+
+/* Leaflet adjustments to match the surface tokens. */
+.map-tiles { filter: grayscale(0.9) contrast(0.85) brightness(1.04); }
+.map-tiles-dark { filter: invert(1) hue-rotate(180deg) grayscale(0.9) brightness(0.75) contrast(0.9); }
+/* Data maps: the basemap recedes so the price layer leads. */
+.map-tiles-muted { filter: grayscale(1) contrast(0.5) brightness(1.2); }
+.map-tiles-dark-muted { filter: invert(1) hue-rotate(180deg) grayscale(1) brightness(0.55) contrast(0.7); }
+.leaflet-container { font: inherit; background: rgb(var(--surface-sunken)); }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { background: rgb(var(--surface)); color: rgb(var(--ink)); box-shadow: 0 1px 2px rgb(20 24 21 / 0.06), 0 8px 24px rgb(20 24 21 / 0.12); }
+.leaflet-popup-content-wrapper { border-radius: 6px; }
+.leaflet-popup-content { margin: 12px 14px; font-size: 13px; line-height: 1.45; }
+.leaflet-control-attribution { font-size: 10px; }
+.leaflet-bar a { color: rgb(var(--ink)); background: rgb(var(--surface)); border-color: rgb(var(--line)); }
