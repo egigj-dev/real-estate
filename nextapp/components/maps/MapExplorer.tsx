@@ -133,7 +133,8 @@ export default function MapExplorer({ listings, mode, selected, onModeChange, on
           />
         </div>
 
-        <aside
+        <div
+          role="region"
           aria-label="Detajet e zonës"
           aria-live="polite"
           className="border-t border-line bg-surface p-5 md:absolute md:right-4 md:top-4 md:z-[500] md:w-[300px] md:rounded-lg md:border md:shadow-overlay"
@@ -150,7 +151,7 @@ export default function MapExplorer({ listings, mode, selected, onModeChange, on
               ))}
             </Select>
           </label>
-        </aside>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-3">

@@ -89,8 +89,9 @@ export default function PriceMap({ areas, breaks, selected, hovered, onSelect, o
               click: () => onSelect(isSel ? null : a.key),
               mouseover: () => onHover(a.key),
               mouseout: () => onHover(null),
-              // Shapes stay out of the tab order; the panel's list is the keyboard route.
-              add: e => e.target.getElement()?.setAttribute('aria-label', a.label),
+              // Shapes are hidden from assistive technology: the panel's list offers the same
+              // choices to keyboard and screen-reader users, without ~100 unlabelled tab stops.
+              add: e => e.target.getElement()?.setAttribute('aria-hidden', 'true'),
             }}
           />
         )
